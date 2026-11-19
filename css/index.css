@@ -872,3 +872,39 @@ div.bar_tooltip .group_swatch {
     color: #888;
     font-size: 0.85em;
 }
+
+/* composition plot: a group's topics stacked, in distinct colors */
+
+.composition {
+    margin-top: 1.5em;
+}
+
+.composition .composition_mode {
+    margin-bottom: 0.3em;
+}
+
+.composition path.composition_layer {
+    stroke: #fff;
+    stroke-width: 0.5px;
+    cursor: pointer;
+}
+
+.composition .faded {
+    opacity: 0.2;
+}
+
+.composition .composition_legend {
+    margin-top: 0.5em;
+    column-width: 22em;
+    column-gap: 2em;
+}
+
+.composition a.composition_item {
+    display: block;
+    color: inherit;
+    break-inside: avoid;
+}
+
+.composition a.composition_item .group_swatch {
+    margin-right: 0.4em;
+}

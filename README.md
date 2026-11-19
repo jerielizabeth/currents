@@ -274,6 +274,7 @@ When groups are defined:
 - **Group page** (`#/group/n`, where `n` is the group's 1-based position in `topic_groups`, or `#/group/other`):
   - the combined share of the group's topics in each condition (the sum of its topics' conditional proportions)
   - the group's overall share of the corpus
+  - the group's topics over time: a stacked area plot with one layer per topic, in distinct colors. In "share of group" mode (the default) each condition is scaled to 100%, showing how the group's words divide among its topics and so how the group's language shifts; in "share of corpus" mode the layers add up to the group's combined share. Layers are stacked by when each topic is most prominent within the group, earliest at the bottom. Hovering over a layer or its legend entry highlights it, and clicking it opens the topic.
   - a table of its topics
   
   Group pages are also listed in the "Group" menu in the navigation bar.
@@ -291,6 +292,7 @@ The compare page (`#/compare`, also under "Compare groups..." in the Group menu)
 - rename a group by editing its name in the table
 - pick a group's topics from a checklist, which can be filtered by label or top words and, if the model has groups, is divided into sections by group with "select all" and "clear" links
 - hover over the plot to read each group's value in a condition
+- see the topics within the group being edited over time, in the same stacked plot as on the group page
 
 Unlike `topic_groups`, these groups may overlap: a topic can be in more than one. Hidden topics are left out of the combined shares, as on the group page.
 

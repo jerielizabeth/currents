@@ -29,6 +29,7 @@ view.compare = function (p) {
 
     view.compare.defined_menu(p);
     view.compare.picker(p);
+    view.compare.composition();
 };
 
 view.compare.state = {
@@ -342,17 +343,50 @@ view.compare.picker = function (p) {
     labels.select("span.compare_words").text(function (t) { return t.words; });
 };
 
+// Breakdown by topic of the group being edited, using the data from the
+// last plot if it was calculated for the groups now shown
+view.compare.composition = function () {
+    var lp = view.compare.last_plot,
+        last = view.compare.last,
+        j = view.compare.state.editing,
+        div = d3.select("#compare_composition"),
+        g = last && last.groups[j];
+
+    if (!g || !lp || lp.sig !== last.sig) {
+        div.classed("hidden", true);
+        return;
+    }
+
+    div.select("h3 span.group_swatch").call(view.group.swatch, g);
+    div.select("h3 span.composition_name").text(g.name);
+
+    view.composition({
+        container: "#compare_composition",
+        keys: lp.keys,
+        key: lp.key,
+        type: lp.type,
+        condition_name: lp.condition_name,
+        topics: lp.topics[j]
+    });
+};
+
 // Line plot of each group's combined share in each condition.
+// p.sig: signature of the groups the data were calculated for
 // p.keys: sorted condition keys
 // p.key: the condition key object (invert, display)
-// p.series: [{ name, color, y }], y aligned with keys
+// p.series: [{ name, color, n, y }], y aligned with keys
+// p.topics: for each group, its member topics' series for the composition
+//   plot (see view.composition)
 view.compare.plot = function (p) {
     var spec = utils.clone(VIS.topic_view),
         container = d3.select("#compare_conditional"),
         series = p.series.filter(function (s) { return s.n > 0; }),
         empty = series.length === 0 || p.keys.length === 0,
-        svg, xs, px, scale_x, scale_y, line, axes, paths, focus, dots,
+        svg, xs, px, scale_x, scale_y, line, paths, focus, dots,
         overlay, nearest, fmt = d3.format(VIS.percent_format);
+
+    view.compare.last_plot = p;
+    view.compare.composition();
 
     container.select("p.none").classed("hidden", !empty);
     container.select("#compare_plot").classed("hidden", empty);
@@ -371,70 +405,22 @@ view.compare.plot = function (p) {
 
     xs = p.keys.map(function (k) { return p.key.invert(k); });
 
-    if (p.type === "time") {
-        scale_x = d3.time.scale.utc().domain(d3.extent(xs));
-    } else if (p.type === "continuous") {
-        scale_x = d3.scale.linear().domain(d3.extent(xs));
-    } else {
-        scale_x = d3.scale.ordinal().domain(xs);
-    }
-    if (scale_x.rangePoints) {
-        scale_x.rangePoints([0, spec.w], 1);
-    } else {
-        scale_x.range([0, spec.w]);
-    }
-    px = xs.map(scale_x);
+    scale_x = view.composition.scale_x(p.type, xs, spec.w);
+    px = xs.map(function (x) { return scale_x(x); });
 
     scale_y = d3.scale.linear()
         .domain([0, d3.max(series, function (s) { return d3.max(s.y); })])
         .range([spec.h, 0])
         .nice();
 
-    // axes
-    axes = svg.selectAll("g.axis").data(["x", "y"]);
-    axes.enter().append("g").classed("axis", true)
-        .classed("x", function (v) { return v === "x"; })
-        .classed("y", function (v) { return v === "y"; });
-    axes.attr("transform", function (v) {
-        return v === "x" ? "translate(0," + spec.h + ")" : undefined;
-    })
-        .each(function (v) {
-            var sel = d3.select(this),
-                ax = d3.svg.axis()
-                    .scale(v === "x" ? scale_x : scale_y)
-                    .orient(v === "x" ? "bottom" : "left");
-            if (v === "x") {
-                if (p.type === "time") {
-                    if (spec.time.ticks.unit) {
-                        ax.ticks(d3.time[spec.time.ticks.unit].utc,
-                            spec.time.ticks.n);
-                    } else if (typeof spec.time.ticks === "number") {
-                        ax.ticks(spec.time.ticks);
-                    }
-                } else if (p.type === "continuous") {
-                    ax.ticks(spec.continuous.ticks);
-                }
-            } else {
-                ax.tickSize(-spec.w)
-                    .outerTickSize(0)
-                    .tickFormat(fmt)
-                    .ticks(spec.ticks_y);
-            }
-            sel.call(ax);
-            if (v === "y") {
-                sel.selectAll("g")
-                    .filter(function (d) { return d > 0; })
-                    .classed("minor", true);
-            }
-        });
-
-    svg.selectAll("text.axis_label").data([1])
-        .enter().append("text").classed("axis_label", true);
-    svg.select("text.axis_label")
-        .attr("x", spec.w / 2)
-        .attr("y", spec.h + spec.m.bottom)
-        .attr("text-anchor", "middle")
-        .text(p.condition_name);
+    view.composition.axes({
+        svg: svg,
+        spec: spec,
+        type: p.type,
+        scale_x: scale_x,
+        scale_y: scale_y,
+        condition_name: p.condition_name
+    });
 
     // lines
     line = d3.svg.line()

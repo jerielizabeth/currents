@@ -22,6 +22,7 @@ var dfb = function (spec) {
         topic_filtered,
         topic_groups,
         topic_group,
+        composition_series,
         data_signature,
         setup_listeners, // initialization
         setup_views,
@@ -251,6 +252,16 @@ my.views.set("group", function (g_id, y) {
                     key: my.m.meta_condition(my.condition.field),
                     transition: my.updating
                 });
+
+                view.composition({
+                    container: "#group_composition",
+                    keys: combined.keys().sort(),
+                    key: my.m.meta_condition(my.condition.field),
+                    type: my.condition.type,
+                    condition_name: my.condition.name,
+                    topics: composition_series(members, data,
+                        combined.keys().sort())
+                });
             });
     });
 
@@ -267,7 +278,7 @@ my.views.set("compare", function () {
     var specs = Array.prototype.slice.call(arguments),
         palette = d3.scale.category10(),
         by_id = d3.map(),
-        groups, members;
+        groups, members, sig;
 
     if (!my.m.ready("meta") || !my.m.ready("dt") || !my.m.ready("tw")) {
         view.loading(true);
@@ -308,7 +319,10 @@ my.views.set("compare", function () {
         g.n_hidden = g.topics.length - members(g).length;
     });
 
+    sig = groups.map(view.compare.param).join("/");
+
     view.compare({
+        sig: sig,
         groups: groups,
         defined: topic_groups().map(function (g) {
             return {
@@ -362,6 +376,10 @@ my.views.set("compare", function () {
                 // conditional weights are proportions of the words in each
                 // condition, so a group's share is the members' sum
                 view.compare.plot({
+                    sig: sig,
+                    topics: groups.map(function (g) {
+                        return composition_series(members(g), data, keys);
+                    }),
                     keys: keys,
                     key: my.m.meta_condition(my.condition.field),
                     type: my.condition.type,
@@ -1156,6 +1174,20 @@ topic_group = function (t) {
         return undefined;
     }
     return my.cache.topic_group[t];
+};
+
+// series for view.composition: each of topics ts (0-based) with its
+// conditional proportions (from the all-topics topic_conditional data)
+// at each of the condition keys
+composition_series = function (ts, data, keys) {
+    return ts.map(function (t) {
+        return {
+            t: t,
+            id: String(my.m.topic_id(t)),
+            label: my.m.topic_label(t),
+            y: keys.map(function (k) { return data[t].get(k) || 0; })
+        };
+    });
 };
 
 // Method giving an identifier with a current state of the full data set.  The
