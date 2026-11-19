@@ -153,6 +153,10 @@ var VIS = {
             // actually worth being able to search all the multiple authors
             et_al: Infinity,
             anon: "[Anon]",
+            // if documents have a url field pointing to a PDF in which the
+            // document's (single) page number is its page position, link
+            // to that page with a #page= fragment
+            url_page: false
         }
     },
     bib_view: {

@@ -17,8 +17,11 @@ view.doc = function (p) {
     div.select("#doc_remark .token_count")
         .text(p.total_tokens);
 
+    // no link at all if the bib type gives no URL for this document
+    div.select("#doc_remark .doc_url")
+        .classed("hidden", !p.url);
     div.select("#doc_remark a.url")
-        .attr("href", p.url);
+        .attr("href", p.url || null);
 
     trs = div.select("table#doc_topics tbody")
         .selectAll("tr")

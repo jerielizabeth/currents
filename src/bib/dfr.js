@@ -201,8 +201,20 @@ bib.dfr = function (spec) {
         return s;
     };
 
-    // provide url method
+    // provide url method: a document's own url field if it has one (name an
+    // extra metadata column "url" in VIS.metadata.spec.extra_fields), and
+    // otherwise its JSTOR stable page, taking the id as a JSTOR DOI
+    // With VIS.bib.spec.url_page, a document whose page range is a single
+    // page number links to that page of the PDF (as a #page= fragment,
+    // which browsers' PDF viewers follow).
     that.url = function (doc) {
+        if (doc.url && doc.url !== "NA") {
+            if (my.url_page && /^\d+$/.test(doc.pagerange)
+                    && doc.url.indexOf("#") === -1) {
+                return doc.url + "#page=" + doc.pagerange;
+            }
+            return doc.url;
+        }
         return "http://www.jstor.org"
             + "/stable/"
             + doc.doi;
