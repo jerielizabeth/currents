@@ -1,4 +1,16 @@
-# A simple topic-model browser
+# currents
+
+*currents* is a static, D3-based topic-model browser. It is a continuation of Andrew Goldstone's [dfr-browser](https://github.com/agoldst/dfr-browser): this repository carries dfr-browser's full commit history, through the final upstream commit (`777eaf9`, July 2022), and builds on it.
+
+Additions in *currents*:
+
+- **Topic groups**: assign topics to named groups in `info.json`, then color, sort, filter, and browse the model by group. See [Topic groups](#topic-groups) below.
+
+If you are moving an existing dfr-browser `info.json` from a release older than 0.8.1-alpha, note that `topic_labels` is now a property of `VIS` rather than a top-level property (see [Adding topic labels](#adding-topic-labels)).
+
+All credit for the original design and implementation goes to Andrew Goldstone. The original README text follows, lightly adapted where it describes features added here.
+
+## About dfr-browser (original introduction, by Andrew Goldstone)
 
 These files use [d3](http://d3js.org) to provide a way to browse some of a topic model of texts in a web browser, relying entirely on static html and javascript files.  For more information, see the main project page at [agoldst.github.io/dfr-browser](http://agoldst.github.io/dfr-browser) and the [working demo](http://agoldst.github.io/dfr-browser/demo), a browser for a 64-topic model of the journal *PMLA*.
 
