@@ -754,3 +754,121 @@ a.group_legend_item.filtered_group {
 #group_topics tbody tr {
     cursor: pointer;
 }
+
+/* compare view: ad hoc topic groups */
+
+#compare_groups td {
+    vertical-align: middle;
+}
+
+#compare_groups tr.editing {
+    background-color: #f5f5f5;
+}
+
+#compare_groups input.compare_name {
+    margin-left: 0.4em;
+    padding: 1px 4px;
+    width: 24em;
+    max-width: 80%;
+    border: 1px solid transparent;
+    background: transparent;
+}
+
+#compare_groups input.compare_name:hover,
+#compare_groups input.compare_name:focus {
+    border-color: #ccc;
+    background: #fff;
+}
+
+#compare_groups .compare_count,
+#compare_groups .compare_share,
+#compare_groups .compare_actions {
+    white-space: nowrap;
+}
+
+#compare_add_defined {
+    width: auto;
+    margin-left: 0.5em;
+}
+
+#compare_conditional {
+    margin-top: 1.5em;
+}
+
+#compare_plot path.compare_line {
+    fill: none;
+    stroke-width: 2px;
+}
+
+#compare_plot .compare_focus line {
+    stroke: #888;
+    stroke-dasharray: 2, 2;
+}
+
+#compare_plot .compare_focus circle {
+    stroke: #fff;
+    stroke-width: 1.5px;
+}
+
+#compare_plot rect.compare_overlay {
+    fill: none;
+    pointer-events: all;
+}
+
+div.bar_tooltip .group_swatch {
+    margin-right: 0.2em;
+}
+
+#compare_picker .form-inline {
+    margin-bottom: 0.5em;
+}
+
+#compare_filter {
+    width: 20em;
+    margin-right: 1em;
+}
+
+#compare_picker h4 {
+    font-size: 1em;
+    font-weight: bold;
+    margin: 1.2em 0 0.3em 0;
+}
+
+#compare_picker h4 a {
+    font-weight: normal;
+    font-size: 0.9em;
+    margin-left: 0.8em;
+    cursor: pointer;
+}
+
+#compare_picker .compare_topics {
+    column-width: 24em;
+    column-gap: 2em;
+}
+
+#compare_picker label.compare_topic {
+    display: block;
+    margin: 0;
+    padding: 1px 0;
+    font-weight: normal;
+    cursor: pointer;
+    break-inside: avoid;
+}
+
+#compare_picker label.compare_topic.hidden {
+    display: none;
+}
+
+#compare_picker label.compare_topic input {
+    margin-right: 0.4em;
+}
+
+#compare_picker label.compare_topic.selected .compare_label {
+    font-weight: bold;
+}
+
+#compare_picker .compare_words {
+    margin-left: 0.4em;
+    color: #888;
+    font-size: 0.85em;
+}

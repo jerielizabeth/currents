@@ -34,11 +34,13 @@
             <li class="disabled loading_message"><a href="#/topic">Loading topics...</a></li>
           </ul>
         </li>
-        <li id="nav_group" class="dropdown hidden">
+        <li id="nav_group" class="dropdown">
           <a href="#/group" class="dropdown-toggle" data-toggle="dropdown" data-target="#" id="group_dropdown_toggle">
             Group<b class="caret"></b>
           </a>
           <ul id="group_dropdown" class="dropdown-menu scroll-menu" role="menu" aria-labelledby="group_dropdown_toggle">
+            <li id="nav_compare"><a href="#/compare">Compare groups&hellip;</a></li>
+            <li class="divider hidden" id="group_dropdown_divider"></li>
           </ul>
         </li>
         <li id="nav_doc"><a href="#/doc">Document</a></li>
@@ -310,6 +312,7 @@
             <span class="not-proper hidden">of the corpus</span>
             <span class="proper hidden">total average probability</span>
           </h3>
+          <p><a id="group_compare" href="#/compare">Compare this group with others</a></p>
         </div>
         <div id="group_view_annotation" class="col-md-4">
           <!-- insert class="view_group_n" specific notes here -->
@@ -349,6 +352,65 @@
         </div>
       </div>
     </div> <!-- #group_view_main -->
+  </div>
+
+  <div id="compare_view" class="hidden">
+    <div class="row">
+      <div class="col-md-8">
+        <h2>Compare topic groups</h2>
+        <p class="help">Gather any topics into groups and compare their combined share of the corpus. A topic can be in more than one group. The groups are saved in this page's address, so you can bookmark or share a comparison.</p>
+      </div>
+      <div id="compare_view_annotation" class="col-md-4">
+        <!-- insert class="view_compare" specific notes here -->
+      </div>
+    </div>
+    <div class="row">
+      <div class="col-md-12" id="compare_groups">
+        <table class="table table-condensed hidden">
+          <thead>
+            <tr>
+              <th>Group</th>
+              <th class="th-right">Topics</th>
+              <th class="th-right">
+                <span class="not-proper hidden">proportion of corpus</span>
+                <span class="proper hidden">average probability</span>
+              </th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+          </tbody>
+        </table>
+        <p class="help none">No groups yet. Start a new group, or copy one of the model's groups.</p>
+        <div class="form-inline">
+          <button type="button" class="btn btn-default btn-sm" id="compare_new">+ New group</button>
+          <select class="form-control input-sm" id="compare_add_defined" aria-label="copy a group"></select>
+        </div>
+      </div>
+    </div>
+    <div class="row">
+      <div class="col-md-12" id="compare_conditional">
+        <h3 class="h-small">Combined conditional probability
+          <span class="not-proper hidden">of words in each group's topics</span>
+          <span class="proper hidden">of each group's topics</span>
+        </h3>
+        <p class="help none hidden">Add topics to a group to plot it.</p>
+        <div id="compare_plot">
+        </div>
+      </div>
+    </div>
+    <div class="row">
+      <div class="col-md-12 hidden" id="compare_picker">
+        <h3 class="h-small">Topics in <span class="group_swatch"></span>
+          <span id="compare_editing_name"></span></h3>
+        <div class="form-inline">
+          <input type="search" class="form-control input-sm" id="compare_filter" placeholder="Filter by label or word" aria-label="filter topics">
+          <label class="checkbox-inline"><input type="checkbox" id="compare_selected_only"> selected only</label>
+        </div>
+        <div id="compare_sections">
+        </div>
+      </div>
+    </div>
   </div>
 
   <div id="doc_view" class="hidden">

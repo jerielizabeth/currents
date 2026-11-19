@@ -27,6 +27,8 @@ view.group = function (p) {
     });
 
     d3.select("div#group_plot").call(view.group.color, p.group);
+
+    div.select("a#group_compare").attr("href", p.compare);
 };
 
 // show the help text in place of a group page
@@ -114,17 +116,18 @@ view.group.conditional = function (p) {
     view.topic.conditional(p);
 };
 
-// Navbar menu of groups; the menu is hidden if there are no groups
+// Navbar menu of groups, below the static link to the compare page
 view.group.dropdown = function (p) {
     var lis;
 
-    d3.select("li#nav_group").classed("hidden", p.groups.length === 0);
+    d3.select("li#group_dropdown_divider")
+        .classed("hidden", p.groups.length === 0);
 
     lis = d3.select("ul#group_dropdown")
-        .selectAll("li")
+        .selectAll("li.group_item")
         .data(p.groups, function (g) { return g.id + "\u0000" + g.name; });
 
-    lis.enter().append("li").append("a")
+    lis.enter().append("li").classed("group_item", true).append("a")
         .call(function (a) {
             a.append("span").classed("group_swatch", true);
             a.append("span").classed("group_name", true);

@@ -283,6 +283,25 @@ Hidden topics (`hidden_topics`) are left out of a group's combined share and its
 
 In a multiple-model browser, groups set in the top-level `info.json` apply to every model that does not define its own `topic_groups`. To turn grouping off for one model, give that model `"topic_groups": []`.
 
+### Comparing ad hoc groups
+
+The compare page (`#/compare`, also under "Compare groups..." in the Group menu) lets readers gather any topics into groups of their own and compare those groups' combined shares in a line plot over the conditioning variable. It needs no configuration and works whether or not `topic_groups` is set. On the page you can:
+
+- start a new, empty group, or copy one of the groups from `topic_groups` as a starting point
+- rename a group by editing its name in the table
+- pick a group's topics from a checklist, which can be filtered by label or top words and, if the model has groups, is divided into sections by group with "select all" and "clear" links
+- hover over the plot to read each group's value in a condition
+
+Unlike `topic_groups`, these groups may overlap: a topic can be in more than one. Hidden topics are left out of the combined shares, as on the group page.
+
+The groups are kept only in the page's URL, so a comparison can be bookmarked or shared. Each group is one path segment holding its URI-encoded name, a colon, and a comma-separated list of topic ids:
+
+```
+#/compare/Sabbath:104,132,156/Health:32,94,96
+```
+
+Topic ids that are not in the model are ignored. Every group page links to the compare page with that group already filled in.
+
 ### Adding view annotations
 
 If you wish to add additional HTML to specific views, simply modify [index.html](index.html). Give the annotating elements two CSS classes: `annote` and a class corresponding to the stable URL for the view, but with slashes replaced by underscores. Thus, 

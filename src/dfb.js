@@ -195,7 +195,16 @@ my.views.set("group", function (g_id, y) {
 
     view.group({
         group: g,
-        n_hidden: g.topics.length - members.length
+        n_hidden: g.topics.length - members.length,
+        compare: view_link({
+            type: "compare",
+            param: [view.compare.param({
+                name: g.name,
+                ids: g.topics.map(function (t) {
+                    return String(my.m.topic_id(t));
+                })
+            })]
+        })
     });
 
     if (!my.condition || !my.m.ready("meta_" + my.condition.field)) {
@@ -247,6 +256,135 @@ my.views.set("group", function (g_id, y) {
 
     view.loading(false);
     return (y === undefined) ? [g_id] : [g_id, y];
+});
+
+// Compare ad hoc groups of topics. Each parameter is one group, written as
+// its URI-encoded name, a colon, and a comma-separated list of topic ids,
+// e.g. #/compare/Sabbath:104,132/Health:32,94. The groups live only in the
+// URL, so a comparison can be bookmarked or shared. Unlike the groups in
+// VIS.topic_groups, a topic may be in more than one of these.
+my.views.set("compare", function () {
+    var specs = Array.prototype.slice.call(arguments),
+        palette = d3.scale.category10(),
+        by_id = d3.map(),
+        groups, members;
+
+    if (!my.m.ready("meta") || !my.m.ready("dt") || !my.m.ready("tw")) {
+        view.loading(true);
+        return true;
+    }
+
+    d3.range(my.m.n()).forEach(function (t) {
+        by_id.set(String(my.m.topic_id(t)), t);
+    });
+
+    groups = specs.filter(function (s) { return s !== ""; })
+        .map(function (s, j) {
+            var i = s.lastIndexOf(":"),
+                name = i === -1 ? s : s.slice(0, i),
+                g = { color: palette(j), topics: [ ], ids: [ ] };
+            try {
+                g.name = decodeURIComponent(name);
+            } catch (e) { // malformed escape: keep the raw name
+                g.name = name;
+            }
+            (i === -1 ? [ ] : s.slice(i + 1).split(","))
+                .forEach(function (id) {
+                    var t = by_id.get(id);
+                    // unknown ids (e.g. from another model) are dropped
+                    if (t !== undefined && g.topics.indexOf(t) === -1) {
+                        g.topics.push(t);
+                        g.ids.push(String(my.m.topic_id(t)));
+                    }
+                });
+            return g;
+        });
+
+    // hidden topics stay out of the aggregates, as on the group page
+    members = function (g) {
+        return g.topics.filter(function (t) { return !topic_suppressed(t); });
+    };
+    groups.forEach(function (g) {
+        g.n_hidden = g.topics.length - members(g).length;
+    });
+
+    view.compare({
+        groups: groups,
+        defined: topic_groups().map(function (g) {
+            return {
+                id: g.id,
+                name: g.name,
+                color: g.color,
+                ids: g.topics.map(function (t) {
+                    return String(my.m.topic_id(t));
+                })
+            };
+        }),
+        topics: d3.range(my.m.n()).map(function (t) {
+            return {
+                t: t,
+                id: String(my.m.topic_id(t)),
+                label: my.m.topic_label(t),
+                words: my.m.topic_words(t, 6)
+                    .map(function (w) { return w.word; }).join(" "),
+                group: topic_group(t),
+                hidden: topic_suppressed(t)
+            };
+        })
+    });
+
+    if (!my.condition || !my.m.ready("meta_" + my.condition.field)) {
+        view.loading(true);
+        return true;
+    }
+
+    view.calculating("#compare_view", true);
+    my.m.topic_total(undefined, function (sums) {
+        my.m.topic_conditional(undefined, my.condition.field,
+            function (data) {
+                var total = d3.sum(sums),
+                    keys = d3.set();
+
+                data.forEach(function (m) {
+                    m.keys().forEach(function (k) { keys.add(k); });
+                });
+                keys = keys.values().sort();
+
+                view.calculating("#compare_view", false);
+                view.compare.shares({
+                    shares: groups.map(function (g) {
+                        return d3.sum(members(g), function (t) {
+                            return sums[t];
+                        }) / total;
+                    })
+                });
+
+                // conditional weights are proportions of the words in each
+                // condition, so a group's share is the members' sum
+                view.compare.plot({
+                    keys: keys,
+                    key: my.m.meta_condition(my.condition.field),
+                    type: my.condition.type,
+                    condition_name: my.condition.name,
+                    series: groups.map(function (g) {
+                        var ms = members(g);
+                        return {
+                            name: g.name,
+                            color: g.color,
+                            n: ms.length,
+                            y: keys.map(function (k) {
+                                return d3.sum(ms, function (t) {
+                                    return data[t].get(k) || 0;
+                                });
+                            })
+                        };
+                    })
+                });
+            });
+    });
+
+    view.loading(false);
+    return groups.map(view.compare.param);
 });
 
 my.views.set("word", function (w) {
@@ -795,7 +933,9 @@ refresh = function () {
 
     // ensure highlighting of nav link
     d3.selectAll("#nav_main > li.active").classed("active", false);
-    d3.select("li#nav_" + type).classed("active", true);
+    // the compare page is reached from the Group menu
+    d3.select("li#nav_" + (type === "compare" ? "group" : type))
+        .classed("active", true);
 
     // hide subnavs
     d3.selectAll("#nav_main li:not(.active) > .nav")
