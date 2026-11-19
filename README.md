@@ -241,6 +241,48 @@ One-based topic numbers *as strings* are the keys. This allows for easier editin
 
 Note that in versions of dfr-browser prior to 0.8.1-alpha, `topic_labels` was a top-level property in `info.json` rather than a subproperty of `VIS`.
 
+### Topic groups
+
+Topics can be gathered into named groups, such as broad themes, by adding a `topic_groups` array to `VIS` in `info.json`:
+
+```json
+"topic_groups": [
+    {
+        "name": "Missions",
+        "topics": [3, 7, 12],
+        "color": "#1f77b4"
+    },
+    {
+        "name": "Health reform",
+        "topics": [5, 9]
+    }
+]
+```
+
+- `name` is displayed wherever the group appears.
+- `topics` lists the topics in the group, identified the same way as in `hidden_topics`: by one-based topic number, or by topic ID if `topic_ids` is set (see "Document and topic identifiers" below).
+- `color` is optional. Groups without a color are colored, in order, from d3's ten-color categorical palette.
+
+Each topic belongs to at most one group. If a topic is listed in more than one, the first group listing it wins, and the browser shows a warning. Topics not listed in any group are collected in an "Other" group, which comes last and is colored gray. Its name and color can be set with the `VIS` properties `topic_group_other` and `topic_group_other_color`.
+
+When groups are defined:
+
+- **Overview grid and scaled plot:** circles are colored by group, the grid clusters each group's topics together, and a legend links to each group's page.
+- **Stacked plot:** each group's topics form a contiguous band, drawn in shades of the group's color.
+- **Topic list:** a "group" column shows each topic's group and links to the group's page. It sorts by group and then by label (`#/model/list/group`). The over-time sparklines take the group's color.
+- **Topic page:** the topic's group is shown under the topic's label, and the bars take the group's color.
+- **Group page** (`#/group/n`, where `n` is the group's 1-based position in `topic_groups`, or `#/group/other`):
+  - the combined share of the group's topics in each condition (the sum of its topics' conditional proportions)
+  - the group's overall share of the corpus
+  - a table of its topics
+  
+  Group pages are also listed in the "Group" menu in the navigation bar.
+- **Filtering:** the Settings dialog has a checkbox for each group. Topics in unchecked groups are removed from all views, including the overview plots, the topic list and menu, and the document and word pages. Unlike hidden topics, they stay removed when "Show hidden topics" is checked. The choice persists when switching between models, matching groups by name.
+
+Hidden topics (`hidden_topics`) are left out of a group's combined share and its topic table unless hidden topics are revealed.
+
+In a multiple-model browser, groups set in the top-level `info.json` apply to every model that does not define its own `topic_groups`. To turn grouping off for one model, give that model `"topic_groups": []`.
+
 ### Adding view annotations
 
 If you wish to add additional HTML to specific views, simply modify [index.html](index.html). Give the annotating elements two CSS classes: `annote` and a class corresponding to the stable URL for the view, but with slashes replaced by underscores. Thus, 
