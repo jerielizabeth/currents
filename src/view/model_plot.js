@@ -51,9 +51,13 @@ view.model.plot = function (param) {
         });
     } else {
         // default to grid
-        // arrange alphabetically by name
+        // arrange alphabetically by name, clustered by group if any
         topics.forEach(function (p, j) {
             topics[j].sort_key = view.topic.sort_name(p.label);
+            if (p.group) {
+                topics[j].sort_key = d3.format("05d")(p.group.order) + " "
+                    + topics[j].sort_key;
+            }
         });
         topics = topics.sort(function (a, b) {
             return d3.ascending(a.sort_key, b.sort_key);
@@ -129,7 +133,10 @@ view.model.plot = function (param) {
                 }
             })
             .on("mouseover", function (p) {
-                gs.sort(function (a, b) {
+                // N.B. select the current topic nodes rather than using gs,
+                // which is fixed when this handler is bound: sorting a stale
+                // selection with order() would re-insert removed nodes
+                svg.selectAll("g.topic").sort(function (a, b) {
                     // to bring the hovered circle to front, draw it last
                     // by reordering all the gs
                     if (a.t === b.t) {
@@ -150,11 +157,17 @@ view.model.plot = function (param) {
                     .order();
             })
             .on("mouseout",function() {
-                gs.sort(function (a, b) {
+                svg.selectAll("g.topic").sort(function (a, b) {
                         return d3.ascending(a.t, b.t);
                     })
                     .order();
             });
+
+    // group colors (gs.select passes each topic's datum on to its circle)
+    gs.select("circle.topic_cloud")
+        .each(function (p) {
+            d3.select(this).call(view.group.color, p.group);
+        });
 
     words = gs.selectAll("text.topic_word")
         .data(function (p) {

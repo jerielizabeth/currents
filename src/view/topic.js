@@ -9,6 +9,21 @@ view.topic = function (p) {
 
     div.select("#topic_header").text(p.label);
 
+    // group subheader, linking to the group page
+    div.select("#topic_subheader").classed("hidden", !p.group);
+    if (p.group) {
+        div.select("#topic_subheader span.topic_subtitle")
+            .call(function (sub) {
+                sub.selectAll("*").remove();
+                sub.append("span").call(view.group.swatch, p.group);
+                sub.append("a")
+                    .attr("href", view.group.link(p.group))
+                    .text(" " + p.group.name);
+            });
+    }
+    // bars take the group's color
+    div.select("div#topic_plot").call(view.group.color, p.group);
+
     // (later: nearby topics by J-S div or cor on log probs)
 };
 
@@ -120,9 +135,12 @@ view.topic.docs = function (p) {
     });
 };
 
+// p.container and p.plot select the enclosing div and the plot div; they
+// default to the topic page's (the group page reuses this function)
 view.topic.conditional = function (p) {
     var spec = utils.clone(VIS.topic_view);
-    spec.w = d3.select("#topic_conditional").node().clientWidth || spec.w;
+    spec.w = d3.select(p.container || "#topic_conditional").node().clientWidth
+        || spec.w;
     spec.w = Math.max(spec.w, VIS.topic_view.w); // set a min. width
     spec.w -= spec.m.left + spec.m.right;
     spec.h = Math.floor(spec.w / VIS.topic_view.aspect)
@@ -130,7 +148,7 @@ view.topic.conditional = function (p) {
 
     // copy over conditional variable information to bar-step spec
     spec.time.step = VIS.condition.spec;
-    p.svg = d3.select("div#topic_plot").selectAll("svg")
+    p.svg = d3.select(p.plot || "div#topic_plot").selectAll("svg")
         .data([1]);
     p.svg.enter().call(view.append_plot);
     p.svg = view.setup_plot(p.svg, spec);
@@ -392,7 +410,7 @@ view.topic.conditional_barplot = function (param) {
                         .classed("selected_condition", false);
                     view.tooltip().text(tip_text(d));
                     view.dfb().set_view({
-                        type: "topic",
+                        type: param.view_type || "topic",
                         param: param.t
                     });
                 } else {
@@ -404,7 +422,7 @@ view.topic.conditional_barplot = function (param) {
                         .classed("selected_condition", true);
                     view.tooltip().text(tip_text(d));
                     view.dfb().set_view({
-                        type: "topic",
+                        type: param.view_type || "topic",
                         param: [param.t, d.key]
                     });
                 }

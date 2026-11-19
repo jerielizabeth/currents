@@ -671,3 +671,86 @@ th#doc_view_weight {
     padding-top: 5ex;
     font-style: italic;
 }
+
+/* topic groups */
+
+/* Topics in groups the user has filtered out. Independent of the
+ * hidden_topic class, which can be revealed in settings. */
+.filtered_topic {
+    display: none !important;
+}
+
+.group_swatch {
+    display: inline-block;
+    width: 0.8em;
+    height: 0.8em;
+    border-radius: 2px;
+    vertical-align: baseline;
+}
+
+h2 .group_swatch {
+    width: 0.7em;
+    height: 0.7em;
+}
+
+/* plot containers carrying a group color in --group-color */
+.topic_cloud.grouped {
+    fill: var(--group-color);
+    fill-opacity: 0.3;
+    stroke: var(--group-color);
+    stroke-opacity: 0.8;
+}
+
+.topic_cloud.grouped:hover {
+    fill-opacity: 0.8;
+}
+
+.spark.grouped rect {
+    fill: var(--group-color);
+}
+
+.grouped .topic_proportion rect.display {
+    fill: var(--group-color);
+    stroke: var(--group-color);
+}
+
+.grouped .selected_condition rect.display {
+    fill: #222;
+    stroke: #222;
+}
+
+#group_legend {
+    margin: 4pt 0 6pt 0;
+}
+
+#group_filter .group_filter_items {
+    margin-left: 1.2em;
+}
+
+#group_filter .group_filter_items .group_swatch {
+    margin: 0 0.1em 0 0.4em;
+}
+
+a.group_legend_item {
+    display: inline-block;
+    margin-right: 1.2em;
+    color: inherit;
+}
+
+a.group_legend_item.filtered_group {
+    opacity: 0.35;
+    text-decoration: line-through;
+}
+
+#model_view_list a.topic_group {
+    color: inherit;
+    white-space: nowrap;
+}
+
+#group_dropdown a span.group_name {
+    margin-left: 0.3em;
+}
+
+#group_topics tbody tr {
+    cursor: pointer;
+}

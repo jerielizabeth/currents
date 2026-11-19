@@ -34,6 +34,13 @@
             <li class="disabled loading_message"><a href="#/topic">Loading topics...</a></li>
           </ul>
         </li>
+        <li id="nav_group" class="dropdown hidden">
+          <a href="#/group" class="dropdown-toggle" data-toggle="dropdown" data-target="#" id="group_dropdown_toggle">
+            Group<b class="caret"></b>
+          </a>
+          <ul id="group_dropdown" class="dropdown-menu scroll-menu" role="menu" aria-labelledby="group_dropdown_toggle">
+          </ul>
+        </li>
         <li id="nav_doc"><a href="#/doc">Document</a></li>
         <li id="nav_word"><a href="#/word">Word</a></li>
         <li id="nav_bib"><a href="#/bib">Bibliography</a></li>
@@ -71,6 +78,11 @@
           <div id="reveal_hidden">
             <input type="checkbox">
             <label>Show hidden topics</label>
+          </div>
+          <div id="group_filter" class="hidden">
+            <label>Show topic groups</label>
+            (<a href="#" id="group_filter_all">show all</a>)
+            <div class="group_filter_items"></div>
           </div>
           <div id="n_words_list">
             <input type="number">
@@ -161,6 +173,8 @@
         </div>
       </div>
     </nav>
+    <div id="group_legend" class="hidden">
+    </div>
     <div id="model_view_list" class="hidden">
       <table class="table table-condensed">
         <thead>
@@ -168,6 +182,11 @@
             <th id="model_view_list_topic" class="sort">
               <a href="#/model/list/topic" title="click to sort">
                 topic
+              </a><span class="glyphicon glyphicon-sort"></span>
+            </th>
+            <th id="model_view_list_group" class="sort group_col hidden">
+              <a href="#/model/list/group" title="click to sort by group">
+                group
               </a><span class="glyphicon glyphicon-sort"></span>
             </th>
             <th id="model_view_list_condition" class="sort">
@@ -272,6 +291,64 @@
         </div>
       </div>
     </div> <!-- #topic_view_main -->
+  </div>
+
+  <div id="group_view" class="hidden">
+    <div id="group_view_help" class="hidden">
+      <p class="help" id="group_help_select">Select a group from the "Group" menu above.</p>
+      <p class="help hidden" id="group_help_none">This model has no topic groups. Groups are defined by a <code>topic_groups</code> setting in <code>info.json</code>.</p>
+    </div>
+    <div id="group_view_main">
+      <div class="row">
+        <div id="group_view_header" class="col-md-8">
+          <h2><span id="group_swatch"></span>
+            <span id="group_header"></span></h2>
+          <h3 class="h-small">
+            <span id="group_subheader"></span>;
+            <span class="not-proper hidden">together</span>
+            <span id="group_share"></span>
+            <span class="not-proper hidden">of the corpus</span>
+            <span class="proper hidden">total average probability</span>
+          </h3>
+        </div>
+        <div id="group_view_annotation" class="col-md-4">
+          <!-- insert class="view_group_n" specific notes here -->
+        </div>
+      </div>
+      <div class="row">
+        <div class="col-md-12">
+          <div id="group_conditional">
+            <h3 class="h-small">Combined conditional probability
+              <span class="not-proper hidden">of words in the group's topics</span>
+              <span class="proper hidden">of the group's topics</span>
+            </h3>
+            <p class="help none hidden">None of this group's topics are shown.</p>
+            <div id="group_plot">
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="row">
+        <div class="col-md-12" id="group_topics">
+          <h3 class="h-small">Topics in this group</h3>
+          <p class="help none hidden">None of this group's topics are shown.</p>
+          <table class="table table-condensed calc-done">
+            <thead>
+              <tr>
+                <th>Topic</th>
+                <th>Top words</th>
+                <th colspan="2" class="th-right">
+                  <span class="not-proper hidden">proportion of corpus</span>
+                  <span class="proper hidden">average probability</span>
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div> <!-- #group_view_main -->
   </div>
 
   <div id="doc_view" class="hidden">

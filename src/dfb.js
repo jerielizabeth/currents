@@ -16,7 +16,12 @@ var dfb = function (spec) {
         switch_model,   //                  for switching models
         parse_hash,
         hide_topics,
+        filter_topics,
         topic_hidden,
+        topic_suppressed,
+        topic_filtered,
+        topic_groups,
+        topic_group,
         data_signature,
         setup_listeners, // initialization
         setup_views,
@@ -57,6 +62,7 @@ var dfb = function (spec) {
     my.settings = {
         overview_words: 0,
         show_hidden_topics: false,
+        hidden_groups: [ ], // names of topic groups filtered out of views
         topic_view: { words: 0, docs: 0 },
         model_view: { conditional: { streamgraph: true } }
     };
@@ -97,7 +103,8 @@ my.views.set("topic", function (t_id, y) {
     view.topic({
         t: t,
         words: words,
-        label: my.m.topic_label(t)
+        label: my.m.topic_label(t),
+        group: topic_group(t)
     });
 
     // reveal the view div
@@ -163,6 +170,83 @@ my.views.set("topic", function (t_id, y) {
 
     view.loading(false);
     return (y === undefined) ? [t_id] : [t_id, y];
+});
+
+my.views.set("group", function (g_id, y) {
+    var groups, g, members;
+
+    if (!my.m.ready("meta") || !my.m.ready("dt") || !my.m.ready("tw")) {
+        view.loading(true);
+        return true;
+    }
+
+    groups = topic_groups();
+    g = groups.find(function (x) { return x.id === g_id; });
+
+    // if the group is missing or unspecified, show the help
+    if (!g) {
+        view.group.help({ has_groups: groups.length > 0 });
+        view.loading(false);
+        return true;
+    }
+
+    // hidden topics stay out of the aggregate, as in other aggregate views
+    members = g.topics.filter(function (t) { return !topic_suppressed(t); });
+
+    view.group({
+        group: g,
+        n_hidden: g.topics.length - members.length
+    });
+
+    if (!my.condition || !my.m.ready("meta_" + my.condition.field)) {
+        view.loading(true);
+        return true;
+    }
+
+    view.calculating("#group_view", true);
+    my.m.topic_total(undefined, function (sums) {
+        my.m.topic_conditional(undefined, my.condition.field,
+            function (data) {
+                var combined = d3.map();
+
+                // the conditional weights are proportions of the words in
+                // each condition, so a group's share is the members' sum
+                members.forEach(function (t) {
+                    data[t].forEach(function (k, v) {
+                        combined.set(k, (combined.get(k) || 0) + v);
+                    });
+                });
+
+                view.calculating("#group_view", false);
+                view.group.topics({
+                    topics: members.map(function (t) {
+                        return {
+                            t: t,
+                            id: my.m.topic_id(t),
+                            label: my.m.topic_label(t),
+                            words: my.m.topic_words(t,
+                                my.settings.overview_words),
+                            sum: sums[t]
+                        };
+                    }),
+                    total: d3.sum(sums)
+                });
+
+                view.group.conditional({
+                    t: g.id,
+                    group: g,
+                    condition: combined.has(y) ? y : undefined,
+                    type: my.condition.type,
+                    condition_name: my.condition.name,
+                    data: combined,
+                    key: my.m.meta_condition(my.condition.field),
+                    transition: my.updating
+                });
+            });
+    });
+
+    view.loading(false);
+    return (y === undefined) ? [g_id] : [g_id, y];
 });
 
 my.views.set("word", function (w) {
@@ -242,12 +326,13 @@ my.views.set("words", function () {
     }
     view.loading(false);
 
-    if (!my.settings.show_hidden_topics) {
-        ts = d3.range(my.m.n())
-            .filter(function (t) { return !topic_hidden(t); });
-    }
-    // if we are revealing hidden topics, ts can be undefined
+    ts = d3.range(my.m.n())
+        .filter(function (t) { return !topic_hidden(t); });
+    // if no topics are hidden or filtered, ts can be undefined
     // and m.vocab(ts) will return the full vocab.
+    if (ts.length === my.m.n()) {
+        ts = undefined;
+    }
 
     return view.words(my.m.vocab(ts));
 });
@@ -403,7 +488,10 @@ settings_modal = function () {
     var p = {
         max_words: my.m.n_top_words(),
         max_docs: my.m.n_docs(),
-        condition_type: my.condition.type
+        condition_type: my.condition.type,
+        groups: topic_groups().map(function (g) {
+            return { name: g.name, color: g.color };
+        })
     };
     if (p.max_words === undefined || p.max_docs === undefined) {
         return false;
@@ -468,6 +556,12 @@ my.views.set("model", function (type, p1, p2) {
 
     // reveal navbar
     d3.select("#model_view nav").classed("hidden", false);
+
+    // topic-group legend (the list view shows groups in a column instead)
+    view.group.legend({
+        groups: type_chosen === "list" ? [ ] : topic_groups(),
+        hidden_groups: my.settings.hidden_groups
+    });
 
     if (type_chosen === "list") {
         if (!my.m.ready("meta") || !my.m.ready("dt") || !my.condition
@@ -543,8 +637,13 @@ model_view_list = function (sort, dir) {
                     dir: sort_dir,
                     labels: d3.range(my.m.n()).map(my.m.topic_label),
                     ids: d3.range(my.m.n()).map(my.m.topic_id),
-                    topic_hidden: data.map(function (d) {
-                        return topic_hidden(d.t);
+                    groups: topic_groups().length > 0 ?
+                        d3.range(my.m.n()).map(topic_group) : undefined,
+                    topic_hidden: data.map(function (d, t) {
+                        return topic_suppressed(t);
+                    }),
+                    topic_filtered: data.map(function (d, t) {
+                        return topic_filtered(t);
                     })
                 });
 
@@ -569,7 +668,8 @@ model_view_plot = function (type) {
                     scaled: my.m.topic_scaled(t),
                     total: totals[t],
                     label: my.m.topic_label(t),
-                    id: my.m.topic_id(t)
+                    id: my.m.topic_id(t),
+                    group: topic_group(t)
                 };
             })
         });
@@ -606,7 +706,8 @@ model_view_conditional = function (type) {
                                 return w.word;
                         }),
                         label: my.m.topic_label(t),
-                        id: my.m.topic_id(t)
+                        id: my.m.topic_id(t),
+                        group: topic_group(t)
                     };
                 })
                     .filter(function (topic) {
@@ -688,6 +789,7 @@ refresh = function () {
     // ensure hidden topics are shown/hidden (actually, with
     // asynchronous rendering this isn't perfect)
     hide_topics();
+    filter_topics();
 
     d3.select("#" + type + "_view").classed("hidden", false);
 
@@ -791,7 +893,14 @@ hide_topics = function (flg) {
         });
 };
 
+// Is topic t (0-based) excluded from views, either as one of the
+// VIS.hidden_topics or because its group is filtered out?
 topic_hidden = function (t) {
+    return topic_suppressed(t) || topic_filtered(t);
+};
+
+// Is topic t one of the VIS.hidden_topics (and not currently revealed)?
+topic_suppressed = function (t) {
     if (my.settings.show_hidden_topics) {
         return false;
     }
@@ -807,13 +916,116 @@ topic_hidden = function (t) {
     return my.cache.topic_hidden[t];
 };
 
+// Is topic t in a group the user has filtered out? Unlike hidden topics,
+// filtered topics stay out even when hidden topics are revealed.
+topic_filtered = function (t) {
+    var g = topic_group(t);
+    return g !== undefined && my.settings.hidden_groups.indexOf(g.name) !== -1;
+};
+
+// Filtered topics in class-based displays (the topic list and the topic
+// menu) are hidden by CSS on the filtered_topic class, independently of
+// hide_topics. The list sets its own classes when it renders; the menu
+// is rendered once per model load, so we update it here.
+filter_topics = function () {
+    d3.selectAll("ul#topic_dropdown li")
+        .classed("filtered_topic", function (d) {
+            return d !== undefined && topic_filtered(d.topic);
+        });
+};
+
+// Topic groups
+// ------------
+//
+// VIS.topic_groups is an array of { name, topics, color } objects, where
+// topics lists topic ids (1-based numbers, unless VIS.topic_ids is set), as
+// for VIS.hidden_topics. A topic belongs to at most one group. Topics in no
+// group form an implicit last group with id "other". Returns an array of
+//
+// { id, order, name, color, topics (0-based numbers), other }
+//
+// or an empty array if no groups are configured (which turns grouping off).
+
+topic_groups = function () {
+    var palette = d3.scale.category10(),
+        by_id, assigned, groups, other;
+
+    if (my.cache.topic_groups) {
+        return my.cache.topic_groups;
+    }
+
+    if (!Array.isArray(VIS.topic_groups) || VIS.topic_groups.length === 0
+            || !isFinite(my.m.n())) {
+        return [ ];
+    }
+
+    by_id = d3.map();
+    d3.range(my.m.n()).forEach(function (t) {
+        by_id.set(String(my.m.topic_id(t)), t);
+    });
+    assigned = [ ];
+
+    groups = VIS.topic_groups.map(function (spec, j) {
+        var g = {
+            id: String(j + 1),
+            order: j,
+            name: spec.name || "Group " + String(j + 1),
+            color: spec.color || palette(j),
+            topics: [ ],
+            other: false
+        };
+        (spec.topics || [ ]).forEach(function (t_id) {
+            var t = by_id.get(String(t_id));
+            if (t === undefined) {
+                view.warning("Topic group \"" + g.name
+                    + "\" lists an unknown topic: " + t_id);
+            } else if (assigned[t] !== undefined) {
+                view.warning("Topic " + t_id + " is in more than one group; "
+                    + "keeping it in \"" + assigned[t].name + "\"");
+            } else {
+                assigned[t] = g;
+                g.topics.push(t);
+            }
+        });
+        return g;
+    });
+
+    other = {
+        id: "other",
+        order: groups.length,
+        name: VIS.topic_group_other || "Other",
+        color: VIS.topic_group_other_color || "#999999",
+        topics: d3.range(my.m.n()).filter(function (t) {
+            return assigned[t] === undefined;
+        }),
+        other: true
+    };
+    if (other.topics.length > 0) {
+        other.topics.forEach(function (t) { assigned[t] = other; });
+        groups.push(other);
+    }
+
+    my.cache.topic_group = assigned;
+    my.cache.topic_groups = groups;
+    return groups;
+};
+
+// the group of topic t (0-based), or undefined if grouping is off
+topic_group = function (t) {
+    if (topic_groups().length === 0) {
+        return undefined;
+    }
+    return my.cache.topic_group[t];
+};
+
 // Method giving an identifier with a current state of the full data set.  The
 // only promise is that the data_signature will change if the data have changed
 // in a big way.  Right now the only use for this is for the model/conditional
 // view, which caches the result of the "stacking" calculation and needs to
 // know if we've hidden topics.
 data_signature = function () {
-    return my.id + (my.settings.show_hidden_topics ? "_show" : "_hide");
+    return my.id + (my.settings.show_hidden_topics ? "_show" : "_hide")
+        + "_" + my.settings.hidden_groups.join("|");
 };
 
 // initialization
@@ -1107,6 +1319,11 @@ load_info = function (f, previs, callback) {
             VIS = utils.deep_replace(utils.clone(my.vis_template), vis);
             my.m.set_topic_labels(VIS.topic_labels);
             my.m.set_topic_ids(VIS.topic_ids);
+            // views may have rendered (and cached these) under the previous
+            // model's VIS while this model's info was loading
+            delete my.cache.topic_hidden;
+            delete my.cache.topic_groups;
+            delete my.cache.topic_group;
         } else {
             view.warning("Unable to load model info from " + f);
         }
@@ -1253,11 +1470,13 @@ load_tw = function (f) {
                     id: my.m.topic_id(t),
                     words: my.m.topic_words(t, VIS.model_view.words),
                     label: my.m.topic_label(t),
-                    hidden: topic_hidden(t) // refreshes cache.topic_hidden
+                    hidden: topic_suppressed(t) // refreshes cache.topic_hidden
                 };
             }),
             overview_words: my.settings.overview_words
         });
+
+        view.group.dropdown({ groups: topic_groups() });
 
         // because the hidden-topic setting can change, we have to issue a
         // refresh here whether or not we've loaded new data

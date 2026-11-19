@@ -44,6 +44,8 @@ view.settings = function (p) {
                 });
             });
 
+    view.settings.group_filter(stg, p);
+
     stg.select("#conditional_streamgraph")
         .classed("hidden", p.condition_type === "ordinal")
         .select("input")
@@ -55,4 +57,48 @@ view.settings = function (p) {
                     } }
                 });
             });
+};
+
+// checkboxes for showing or hiding topic groups; the setting stored is the
+// list of names of hidden groups
+view.settings.group_filter = function (stg, p) {
+    var groups = p.groups || [ ],
+        div = stg.select("#group_filter"),
+        items, items_enter, update;
+
+    div.classed("hidden", groups.length === 0);
+
+    items = div.select(".group_filter_items").selectAll("div")
+        .data(groups, function (g) { return g.name; });
+
+    items_enter = items.enter().append("div");
+    items_enter.append("input").attr("type", "checkbox");
+    items_enter.append("span").classed("group_swatch", true);
+    items_enter.append("label");
+    items.exit().remove();
+    items.order();
+
+    update = function () {
+        var hidden = [ ];
+        items.select("input").each(function (g) {
+            if (!this.checked) {
+                hidden.push(g.name);
+            }
+        });
+        view.dfb().update_settings({ hidden_groups: hidden });
+    };
+
+    items.select("input")
+        .property("checked", function (g) {
+            return p.hidden_groups.indexOf(g.name) === -1;
+        })
+        .on("change", update);
+    items.select("span.group_swatch").call(view.group.swatch);
+    items.select("label").text(function (g) { return " " + g.name; });
+
+    div.select("#group_filter_all").on("click", function () {
+        d3.event.preventDefault();
+        items.select("input").property("checked", true);
+        update();
+    });
 };

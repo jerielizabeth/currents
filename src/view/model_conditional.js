@@ -83,18 +83,51 @@ view.model.conditional_plot = function (p) {
     // scales
     // ------
 
-    // color: a visual cue to distinguish topics. // Unfortunately,
-    // 20 colors is as far as any sane person would go, so we'll just
-    // stupidly repeat colors at intervals of 20. We can at least
+    // color: a visual cue to distinguish topics.
+    //
+    // If topics are grouped, each layer is a shade of its group's color.
+    // Shades alternate light and dark within a group, so that adjacent
+    // layers contrast.
+    //
+    // Otherwise, 20 colors is as far as any sane person would go, so we'll
+    // just stupidly repeat colors at intervals of 20. We can at least
     // make sure repeated colors aren't adjacent.
     // TODO make better (shape, pattern?)
     scale_color = (function () {
         var cat20 = d3.scale.category20(),
-            seq = [ ];
-            p.order.forEach(function (k, r) { seq[k] = r; });
-        return function (t, highlight) {
-            var c = cat20(seq[t] % 20);
-            return highlight ? d3.hsl(c).brighter(0.5).toString() : c;
+            rank = [ ], shade = [ ],
+            members = d3.map();
+
+        // rank of each topic (not series index) in the stacking order
+        p.order.forEach(function (k, r) {
+            var d = p.data[k];
+            rank[d.t] = r;
+            if (d.group) {
+                if (!members.has(d.group.id)) {
+                    members.set(d.group.id, [ ]);
+                }
+                members.get(d.group.id).push(d.t);
+            }
+        });
+
+        members.forEach(function (g, ts) {
+            var n = ts.length, half = Math.ceil(n / 2);
+            ts.forEach(function (t, j) {
+                // interleave: 0, half, 1, half + 1, ...
+                var pos = (j % 2 === 0) ? j / 2 : half + (j - 1) / 2;
+                shade[t] = (n > 1) ? pos / (n - 1) - 0.5 : 0; // in [-.5, .5]
+            });
+        });
+
+        return function (d, highlight) {
+            var c;
+            if (d.group) {
+                c = d3.hsl(d.group.color);
+                c.l = Math.max(0.2, Math.min(0.85, c.l + 0.5 * shade[d.t]));
+            } else {
+                c = d3.hsl(cat20(rank[d.t] % 20));
+            }
+            return (highlight ? c.brighter(0.5) : c).toString();
         };
     }());
 
@@ -175,13 +208,16 @@ view.model.conditional_plot = function (p) {
         .append(mark)
         .classed("topic_area", true)
         .attr("clip-path", "url(#model_conditional_clip)")
-        .style("fill", function (d) {
-            return scale_color(d.t);
+        .style("opacity", initial ? 1 : 0);
+
+    // (re)color all marks and bind handlers to this render's scale_color,
+    // since colors depend on which topics are shown
+    marks.style("fill", function (d) {
+            return scale_color(d);
         })
-        .style("opacity", initial ? 1 : 0)
         .on("mouseover", function (d) {
             var label = d.label;
-            d3.select(this).style("fill", scale_color(d.t, true));
+            d3.select(this).style("fill", scale_color(d, true));
 
             if (p.spec.words > 0) {
                 label += ": ";
@@ -196,7 +232,7 @@ view.model.conditional_plot = function (p) {
             view.tooltip().update_pos();
         })
         .on("mouseout", function (d) {
-            d3.select(this).style("fill", scale_color(d.t));
+            d3.select(this).style("fill", scale_color(d));
             view.tooltip().hide();
         })
         .on("click", function (d) {
@@ -381,7 +417,8 @@ view.model.stacked_series = function (p) {
             t: t.t,
             words: t.words,
             label: t.label,
-            id: t.id
+            id: t.id,
+            group: t.group
         };
         series.values = p.keys.map(function (k, j) {
             return {
@@ -404,23 +441,39 @@ view.model.stacked_series = function (p) {
 
     stack.order("inside-out"); // pick a "good" layer order
 
-    result.frac = stack(all_series);
-
-    // retrieve layer order (by recalculating it: dumb)
+    // calculate the layer order
     result.order = stack.order()(all_series.map(function (ds) {
         return ds.values.map(function (d) { return [d.x, d.y]; });
     }));
 
-    // for raw-counts, enforce same order, even if not "good"
+    // with topic groups, keep each group's layers together, in group order
+    // (and in the "good" order within each group)
+    if (all_series.length > 0 && all_series[0].group) {
+        result.order = (function (order) {
+            var pos = [ ];
+            order.forEach(function (k, r) { pos[k] = r; });
+            return order.slice().sort(function (a, b) {
+                return d3.ascending(all_series[a].group.order,
+                        all_series[b].group.order)
+                    || d3.ascending(pos[a], pos[b]);
+            });
+        }(result.order));
+    }
+
+    // enforce that order for both fractions and raw counts
     stack.order(function (d) {
         return result.order;
     });
+
+    result.frac = stack(all_series);
 
     result.raw = stack(all_series.map(function (s) {
         return {
             t: s.t,
             words: s.words,
             label: s.label,
+            id: s.id,
+            group: s.group,
             values: s.values.map(function (d) {
                 return {
                     x: d.x,

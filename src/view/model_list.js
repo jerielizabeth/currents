@@ -27,6 +27,8 @@ view.model.list = function (p) {
                 label: p.labels[t],
                 id: p.ids[t],
                 hidden: !!p.topic_hidden[t],
+                filtered: !!p.topic_filtered[t],
+                group: p.groups ? p.groups[t] : undefined,
                 words: p.words[t],
                 sum: p.sums[t]
             };
@@ -40,6 +42,8 @@ view.model.list = function (p) {
     });
 
     trs.classed("hidden_topic", function (t) { return t.hidden; });
+    // topics in filtered-out groups are hidden by CSS
+    trs.classed("filtered_topic", function (t) { return t.filtered; });
 
     // create topic label column
     trs_enter.append("td").append("a").classed("topic_name", true);
@@ -51,9 +55,37 @@ view.model.list = function (p) {
         })
         .text(function (t) { return t.label; });
 
+    // create topic group column (hidden if there are no groups)
+    trs_enter.append("td").classed("group_col", true)
+        .append("a").classed("topic_group", true)
+        .call(function (a) {
+            a.append("span").classed("group_swatch", true);
+            a.append("span").classed("group_name", true);
+        })
+        .on("click", function () {
+            // follow the link to the group, not the row's link to the topic
+            d3.event.stopPropagation();
+        });
+    trs.select("a.topic_group")
+        .attr("href", function (t) {
+            return t.group ? view.group.link(t.group) : null;
+        });
+    trs.select("a.topic_group span.group_swatch")
+        .each(function (t) {
+            d3.select(this).call(view.group.swatch, t.group);
+        });
+    trs.select("a.topic_group span.group_name")
+        .text(function (t) { return t.group ? " " + t.group.name : ""; });
+    d3.selectAll("#model_view_list .group_col")
+        .classed("hidden", !p.groups);
+
     // create conditional plot column
     trs_enter.append("td").append("div").classed("spark", true)
         .call(view.append_plot);
+    trs.select("td div.spark")
+        .each(function (t) {
+            d3.select(this).call(view.group.color, t.group);
+        });
     trs.select("td div.spark svg")
         .call(view.setup_plot, spec);
     trs.select("td div.spark svg > g")
@@ -122,6 +154,12 @@ view.model.list = function (p) {
                 }
             });
             return result;
+        });
+    } else if (p.sort === "group" && p.groups) {
+        // by group (in configured order), then by label
+        keys = p.labels.map(function (l, t) {
+            return d3.format("05d")(p.groups[t].order) + " "
+                + view.topic.sort_name(l);
         });
     } else {
         // default sort: by label sort name,

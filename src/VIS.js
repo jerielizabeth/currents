@@ -171,5 +171,14 @@ var VIS = {
     resize_refresh_delay: 100, // ms
     hidden_topics: [],      // list of 1-based topic numbers to suppress
     show_hidden_topics: false
+    // Topic groups (off by default). An array of groups, in display order:
+    // topic_groups: [
+    //     { name: "group name",
+    //       topics: [1, 5, 9], // topic ids, as for hidden_topics
+    //       color: "#1f77b4"   // optional; default from d3 category10
+    //     }, ...
+    // ],
+    // topic_group_other: "Other",        // name for topics in no group
+    // topic_group_other_color: "#999999" // color for topics in no group
 };
 
