@@ -104,9 +104,13 @@ var view = (function () {
                 return m.id === p.id;
             });
 
+        // the browser's name, then the project's title from info.json (the
+        // ": " between them in the navbar comes from the stylesheet)
         if (p.title) {
             d3.selectAll(".model_title")
                 .html(p.title);
+            document.title = "Currents: "
+                + d3.select(".model_title").node().textContent;
         }
 
         // multiple models: data dropdown menu

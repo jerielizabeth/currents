@@ -934,3 +934,30 @@ div.bar_tooltip .group_swatch {
     color: #888;
     font-style: italic;
 }
+
+/* navbar brand: the browser's name, then the project's title */
+
+.navbar-brand .app_name {
+    color: #eee;
+    font-weight: bold;
+}
+
+.navbar-brand .model_title {
+    font-size: 15px;
+}
+
+/* ": " between the browser's name and the project's title, when there is one */
+.navbar-brand .model_title:not(:empty)::before {
+    content: ":\00a0";
+    color: #eee;
+    font-size: 18px;
+    font-weight: bold;
+}
+
+/* room for the brand and all the menus on one line */
+@media (min-width: 768px) {
+    .navbar-nav > li > a {
+        padding-left: 11px;
+        padding-right: 11px;
+    }
+}
