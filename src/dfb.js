@@ -23,6 +23,7 @@ var dfb = function (spec) {
         topic_groups,
         topic_group,
         composition_series,
+        doc_text,
         data_signature,
         setup_listeners, // initialization
         setup_views,
@@ -535,6 +536,8 @@ my.views.set("doc", function (doc) {
         meta = my.m.meta().doc(doc);
     }
     d3.select("#doc_view_main").classed("hidden", false);
+
+    doc_text(meta.doi);
 
     view.calculating("#doc_view", true);
     my.m.doc_topics(d, my.m.n(), function (ts) {
@@ -1174,6 +1177,58 @@ topic_group = function (t) {
         return undefined;
     }
     return my.cache.topic_group[t];
+};
+
+// Show the text of the document with the given id on the document page,
+// if VIS.text.url is set. Texts are in zipped JSON bundles of { id: text }
+// written by bin/prepare-text; a document's bundle is found by rewriting
+// its id with VIS.text.path.match and .replace (or is the id itself).
+doc_text = function (id) {
+    var cfg = VIS.text,
+        key, path,
+        show = function (texts) {
+            view.doc.text({
+                enabled: true,
+                note: cfg.note,
+                text: texts && texts.hasOwnProperty(id) ? texts[id]
+                    : undefined
+            });
+        };
+
+    if (!cfg || !cfg.url) {
+        view.doc.text({ enabled: false });
+        return;
+    }
+
+    key = cfg.path ? id.replace(new RegExp(cfg.path.match),
+            cfg.path.replace) : id;
+    path = cfg.url + key + ".json.zip";
+    my.doc_text_id = id;
+
+    if (!my.text_bundles || my.text_bundles.size() > 50) {
+        my.text_bundles = d3.map();
+    }
+    if (my.text_bundles.has(path)) {
+        show(my.text_bundles.get(path));
+        return;
+    }
+
+    view.doc.text({ enabled: true, note: cfg.note, loading: true });
+    load_data(path, function (error, s) {
+        var texts;
+        if (!error && s) {
+            try {
+                texts = JSON.parse(s);
+                my.text_bundles.set(path, texts);
+            } catch (e) {
+                texts = undefined;
+            }
+        }
+        // only show it if the reader hasn't moved on to another document
+        if (my.doc_text_id === id) {
+            show(texts);
+        }
+    });
 };
 
 // series for view.composition: each of topics ts (0-based) with its

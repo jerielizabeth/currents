@@ -908,3 +908,29 @@ div.bar_tooltip .group_swatch {
 .composition a.composition_item .group_swatch {
     margin-right: 0.4em;
 }
+
+/* document text on the document page */
+
+#doc_text h3 a.doc_text_toggle {
+    margin-left: 0.8em;
+    font-size: 0.75em;
+    font-weight: normal;
+}
+
+#doc_text .doc_text_body {
+    max-height: 24em;
+    overflow-y: auto;
+    margin-bottom: 1.5em;
+    padding: 0.6em 0.9em;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    background: #fafafa;
+    font-family: Georgia, "Times New Roman", serif;
+    line-height: 1.45;
+    white-space: pre-wrap;
+}
+
+#doc_text .doc_text_body.doc_text_missing {
+    color: #888;
+    font-style: italic;
+}

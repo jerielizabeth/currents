@@ -304,6 +304,30 @@ The groups are kept only in the page's URL, so a comparison can be bookmarked or
 
 Topic ids that are not in the model are ignored. Every group page links to the compare page with that group already filled in.
 
+### Showing document texts
+
+If you have the texts of the documents, the document page can show each one below its citation, in a scrolling box readers can hide. Prepare the texts with [bin/prepare-text](bin/prepare-text) (Python 3), which reads the document ids from the metadata and packs the texts into zipped bundles:
+
+```
+bin/prepare-text --meta data/meta.csv.zip --texts path/to/texts --out data/text \
+    --match '^([A-Za-z]+)(.*)-page\d+\.txt$' --replace '$1/$1$2'
+```
+
+Each document's text is read from a file named by its id in the `--texts` directory (add `--suffix .txt` if the ids lack the extension). `--match` and `--replace` decide which bundle a document goes in, by rewriting its id; this example, for ids like `RH18900204-V67-05-page5.txt`, makes one bundle per journal issue, `data/text/RH/RH18900204-V67-05.json.zip`. Without them each document is its own bundle, which is simplest but means one file per document. The script prints the setting to add to `VIS` in `info.json`:
+
+```json
+"text": {
+    "url": "data/text/",
+    "path": {
+        "match": "^([A-Za-z]+)(.*)-page\\d+\\.txt$",
+        "replace": "$1/$1$2"
+    },
+    "note": "Text recognized from the page scan, which contains errors."
+}
+```
+
+`url` may also be the address of another web server (which must allow cross-origin requests, as GitHub Pages does), so that a large set of texts can be hosted apart from the browser. `note`, if given, is shown above each text.
+
 ### Adding view annotations
 
 If you wish to add additional HTML to specific views, simply modify [index.html](index.html). Give the annotating elements two CSS classes: `annote` and a class corresponding to the stable URL for the view, but with slashes replaced by underscores. Thus, 

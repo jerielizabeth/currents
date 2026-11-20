@@ -1,0 +1,129 @@
+#!/usr/bin/env python3
+"""
+Bundle document texts for display on the browser's document pages.
+
+Usage:
+    prepare-text --meta META --texts DIR [--out OUT] [--header]
+                 [--match REGEX --replace TEMPLATE] [--suffix SUFFIX]
+
+Reads document ids from the first column of META (meta.csv or
+meta.csv.zip; headerless unless --header is given) and looks for each
+document's text in DIR/<id><SUFFIX>. The texts are written as zipped JSON
+objects of {id: text}, "bundles," under OUT (data/text by default).
+
+Which bundle a document goes in is given by rewriting its id with the
+regular expression --match and the replacement --replace, written in
+JavaScript's syntax ($1, $2, ...), since the browser repeats the same
+rewriting to find a document's bundle. Without --match, each document has
+its own bundle. Grouping documents into bundles, say by journal issue,
+keeps the number of files manageable and lets the browser fetch the texts
+of neighboring documents together. A "/" in the result puts bundles in
+subdirectories. For example, for ids like RH18900204-V67-05-page5.txt,
+
+    --match '^([A-Za-z]+)(.*)-page\\d+\\.txt$' --replace '$1/$1$2'
+
+puts each issue's pages in one bundle, RH/RH18900204-V67-05.json.zip.
+
+When done, prints the VIS.text setting to add to info.json.
+"""
+
+import argparse
+import csv
+import io
+import json
+import os
+import re
+import sys
+import zipfile
+from collections import defaultdict
+
+
+def read_ids(meta, header):
+    if meta.endswith(".zip"):
+        with zipfile.ZipFile(meta) as z:
+            name = [n for n in z.namelist() if not n.endswith("/")][0]
+            s = z.read(name).decode("utf-8")
+    else:
+        with open(meta, encoding="utf-8") as f:
+            s = f.read()
+    rows = [r for r in csv.reader(io.StringIO(s)) if r and r[0].strip()]
+    if header:
+        rows = rows[1:]
+    return [r[0].strip() for r in rows]
+
+
+def js_to_py_template(t):
+    # $1 -> \g<1>; $$ -> $
+    return re.sub(r"\$(\d+)", r"\\g<\1>", t).replace("$$", "$")
+
+
+def main():
+    ap = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--meta", required=True)
+    ap.add_argument("--texts", required=True)
+    ap.add_argument("--out", default="data/text")
+    ap.add_argument("--header", action="store_true")
+    ap.add_argument("--match")
+    ap.add_argument("--replace")
+    ap.add_argument("--suffix", default="")
+    args = ap.parse_args()
+
+    if (args.match is None) != (args.replace is None):
+        ap.error("--match and --replace go together")
+
+    ids = read_ids(args.meta, args.header)
+    if args.match:
+        pat = re.compile(args.match)
+        repl = js_to_py_template(args.replace)
+        unmatched = [i for i in ids if not pat.search(i)]
+        if unmatched:
+            sys.exit("%d ids don't match --match, e.g. %s"
+                     % (len(unmatched), unmatched[0]))
+
+        def key(i):
+            return pat.sub(repl, i, count=1)
+    else:
+        def key(i):
+            return i
+
+    bundles = defaultdict(dict)
+    missing = []
+    for i in ids:
+        path = os.path.join(args.texts, i + args.suffix)
+        try:
+            with open(path, encoding="utf-8", errors="replace") as f:
+                text = f.read()
+        except FileNotFoundError:
+            missing.append(i)
+            continue
+        bundles[key(i)][i] = text.replace("\r\n", "\n").strip()
+
+    total = 0
+    for k, texts in bundles.items():
+        dest = os.path.join(args.out, k + ".json.zip")
+        os.makedirs(os.path.dirname(dest), exist_ok=True)
+        member = os.path.basename(k) + ".json"
+        with zipfile.ZipFile(dest, "w", zipfile.ZIP_DEFLATED,
+                             compresslevel=9) as z:
+            z.writestr(member, json.dumps(texts, ensure_ascii=False,
+                                          separators=(",", ":")))
+        total += os.path.getsize(dest)
+
+    print("%d documents in %d bundles, %.1f MB, written to %s"
+          % (len(ids) - len(missing), len(bundles), total / 1e6, args.out),
+          file=sys.stderr)
+    if missing:
+        print("%d documents had no text file, e.g. %s"
+              % (len(missing), os.path.join(args.texts, missing[0] + args.suffix)),
+              file=sys.stderr)
+
+    setting = {"url": args.out.rstrip("/") + "/"}
+    if args.match:
+        setting["path"] = {"match": args.match, "replace": args.replace}
+    print('Add to "VIS" in info.json:', file=sys.stderr)
+    print(json.dumps({"text": setting}, indent=4))
+
+
+if __name__ == "__main__":
+    main()

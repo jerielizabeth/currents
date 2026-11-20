@@ -79,3 +79,41 @@ view.doc = function (p) {
     });
 };
 
+
+// The document's text, if the browser has texts (VIS.text).
+// p.enabled: false to hide the section
+// p.loading: true while the text is being fetched
+// p.text: the text, or undefined if there is none
+// p.note: optional remark shown above the text
+view.doc.text = function (p) {
+    var div = d3.select("div#doc_text"),
+        shown = view.doc.text.shown,
+        body = div.select(".doc_text_body");
+
+    div.classed("hidden", !p.enabled);
+    if (!p.enabled) {
+        return;
+    }
+
+    div.select(".doc_text_note")
+        .classed("hidden", !p.note)
+        .text(p.note || "");
+
+    div.select("a.doc_text_toggle")
+        .text(shown ? "hide" : "show")
+        .on("click", function () {
+            d3.event.preventDefault();
+            view.doc.text.shown = !shown;
+            view.doc.text(p);
+        });
+
+    body.classed("hidden", !shown)
+        .classed("doc_text_missing", !p.loading && p.text === undefined)
+        .text(p.loading ? "Loading text..."
+            : p.text === undefined ? "No text is available for this document."
+                : p.text);
+    body.node().scrollTop = 0;
+};
+
+// whether the text is shown (kept as the reader moves between documents)
+view.doc.text.shown = true;

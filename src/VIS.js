@@ -10,6 +10,11 @@ var VIS = {
         tw: "data/tw.json",
         topic_scaled: "data/topic_scaled.csv"
     },
+    text: {             // document texts for the document page (see
+        url: "",        // bin/prepare-text): bundles' location, "" for none
+        path: undefined,// { match, replace }: rewrites an id as a bundle path
+        note: ""        // optional remark shown above the text
+    },
     aliases: {                  // simple aliasing in URLs:
         yearly: "conditional"   // #/model/yearly/... -> #/model/conditional/...
     },
