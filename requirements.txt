@@ -1,0 +1,8 @@
+# Python packages for the data-preparation tools in bin/ (prepare-text,
+# prepare-text-topics, prepare-cutoffs, compare-cutoffs).
+#
+# None are needed at present: the tools use only Python's standard library.
+# They need Python 3.12 or later (`make venv` uses 3.14, the version the
+# published cutoff results were produced with), because sum() of floats
+# changed in 3.12 and results from older versions can differ in the last
+# digits. Add any packages a tool comes to need here.

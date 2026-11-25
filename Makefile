@@ -2,6 +2,8 @@
 # make lint -- linting
 # make uglify -- compile minified source file
 # make tarball -- create dfb.tar.gz file suitable for deployment as a website
+# make venv -- create .venv, a Python environment for the tools in bin/
+#     (uses python3.14; override with make venv PYTHON=/path/to/python3.x)
 
 source_map :=
 
@@ -46,4 +48,16 @@ tarball: dfb.tar.gz
 
 .DEFAULT_GOAL := uglify
 
-.PHONY: lint uglify tarball
+PYTHON ?= python3.14
+
+venv: .venv/bin/python
+
+.venv/bin/python: requirements.txt
+	$(PYTHON) -c 'import sys; sys.exit(sys.version_info < (3, 12))' \
+	    || { echo "Python 3.12 or later is needed"; exit 1; }
+	rm -rf .venv
+	$(PYTHON) -m venv .venv
+	.venv/bin/python -m pip install --quiet -r requirements.txt
+	touch .venv/bin/python
+
+.PHONY: lint uglify tarball venv

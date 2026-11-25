@@ -86,6 +86,17 @@ In case you wish to edit the exported files or create them another way, here are
 
 Except for `data/info.json`, which is hard-coded, all of the filenames are configurable. They are properties of the `VIS.files` object and can be modified by adding a `files` property to `VIS` in [info.json](data/info.json). The configurable file names can be either local paths or URLs (they are passed straight on to [d3.xhr](https://github.com/d3/d3/wiki/Requests#d3_xhr)). The property names for the last four listed above are `dt`, `tw`, `meta`, and `topic_scaled`. If a given filename ends in `.zip`, the browser uses [JSZip](http://stuk.github.io/jszip/) to unzip the file. It is normally not worth compressing `tw.json` or `topic_scaled.csv`.
 
+### Python tools and their environment
+
+Besides the old `bin/prepare-data` (Python 2, described next), Currents has Python 3 tools in [bin/](bin/) for texts, topic highlighting, and topic cutoffs: `prepare-text`, `prepare-text-topics`, `prepare-cutoffs`, and `compare-cutoffs`. They need only Python's standard library, but Python 3.12 or later, because `sum()` of floating-point numbers changed in 3.12 and the cutoff results can otherwise differ in their last digits. To make a Python environment for them:
+
+```
+make venv                    # uses python3.14; or make venv PYTHON=python3.12
+source .venv/bin/activate    # then bin/prepare-cutoffs etc. use it
+```
+
+The environment lives in `.venv` (not tracked by git). Any packages the tools come to need go in [requirements.txt](requirements.txt), and `make venv` installs them.
+
 ### Preparing data files entirely on the command line
 
 If you prefer not to use dfrtopics, the supplied [prepare-data](bin/prepare-data) python script can produce the necessary files from model data in multiple formats---except for the scaled topic coordinates. The script can also check your browser data folder to verify that you have what you need: `bin/prepare-data check`. Use `bin/prepare-data` without arguments for usage information.
