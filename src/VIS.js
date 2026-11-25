@@ -161,7 +161,11 @@ var VIS = {
             // if documents have a url field pointing to a PDF in which the
             // document's (single) page number is its page position, link
             // to that page with a #page= fragment
-            url_page: false
+            url_page: false,
+            // parts of the citation to leave out: "author", "title"
+            citation_omit: [ ],
+            // d3.time.format for the date in citations
+            date_format: "%B %Y"
         }
     },
     bib_view: {

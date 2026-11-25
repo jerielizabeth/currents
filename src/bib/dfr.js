@@ -166,31 +166,42 @@ bib.dfr = function (spec) {
     that.doc_author = doc_author;
 
     // override inherited citation
+    // VIS.bib.spec.citation_omit can list "author" and "title" to leave
+    // them out (as when the title only repeats the journal, issue, and
+    // date); VIS.bib.spec.date_format is the d3.time.format for the date.
     that.citation = function (doc) {
-        var s = doc_author(doc.authors),
+        var omit = my.citation_omit || [ ],
+            s = "",
             title;
 
-        // don't duplicate trailing period on middle initial etc.
-        s = s.replace(/\.?$/, ". ");
-        // double quotation marks in title to single
-        // based on https://gist.github.com/drdrang/705071
-        title = doc.title.replace(/“/g,'‘')
-            .replace(/”/g,'’')
-            .replace(/(^|[-\u2014/(\[{\u2018\s])"/g, "$1‘") // opening "
-            .replace(/"/g,'’') // which leaves closing "
-            .replace(/'/g,'’')
-            .replace(/ <br><\/br>/g,'. ');
-        s += '“' + title + '.”';
-        s = s.replace(/’\./g,".’"); // fix up ’.” situations
+        if (omit.indexOf("author") === -1) {
+            s = doc_author(doc.authors);
+            // don't duplicate trailing period on middle initial etc.
+            s = s.replace(/\.?$/, ". ");
+        }
+        if (omit.indexOf("title") === -1) {
+            // double quotation marks in title to single
+            // based on https://gist.github.com/drdrang/705071
+            title = doc.title.replace(/“/g,'‘')
+                .replace(/”/g,'’')
+                .replace(/(^|[-\u2014/(\[{\u2018\s])"/g, "$1‘") // opening "
+                .replace(/"/g,'’') // which leaves closing "
+                .replace(/'/g,'’')
+                .replace(/ <br><\/br>/g,'. ');
+            s += '“' + title + '.”';
+            s = s.replace(/’\./g,".’"); // fix up ’.” situations
+            s += " ";
+        }
 
-        s += " <em>" + doc.journal + "</em> ";
+        s += "<em>" + doc.journal + "</em> ";
         s += doc.volume;
         if (doc.issue) {
             s += ", no. " + doc.issue;
         }
 
         // JSTOR supplies UTC dates
-        s += " (" + d3.time.format.utc("%B %Y")(doc.date) + "): ";
+        s += " (" + d3.time.format.utc(my.date_format || "%B %Y")(doc.date)
+            .replace(/ +/g, " ") + "): ";
 
         s += doc.pagerange + ".";
 
