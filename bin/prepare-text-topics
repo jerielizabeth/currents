@@ -1,0 +1,244 @@
+#!/usr/bin/env python3
+"""
+Record which topic each word of each document's text was assigned to, so
+the document page can highlight the text by topic.
+
+Usage:
+    prepare-text-topics --state STATE --meta META --text TEXT [--out OUT]
+                        [--header] [--match REGEX --replace TEMPLATE]
+
+STATE is the MALLET sampling state (gzipped, from train-topics
+--output-state) for the model the browser shows, with documents in the
+same order as the rows of META. TEXT is the directory of text bundles
+written by bin/prepare-text, and --match and --replace must be the ones
+used there (they are VIS.text.path in info.json).
+
+The model's tokens are a subsequence of each text's words, lowercased,
+with stopwords removed, and possibly lemmatized or joined into phrases
+(young_man). Each token is matched, in order, to the next text word (or
+run of words, for a phrase) that it fits: the same word, a plural or
+similar form of it (members -> member), or a common irregular plural.
+
+Writes zipped JSON bundles of {id: [gap, n, topic, gap, n, topic, ...]}
+under OUT (data/text-topics by default), one per text bundle. Each triple
+is one token: gap is the number of text words skipped since the previous
+token, n the number of words the token covers, and topic its 0-based
+topic. Text words are runs of the letters A-Z and a-z, as matched by the
+regular expression [A-Za-z]+, which the browser uses in the same way (so
+an apostrophe splits a word, as in the model's tokens: children's ->
+children, s). Prints how many tokens were
+matched, and the VIS.text.topics setting for info.json.
+"""
+
+import argparse
+import csv
+import gzip
+import io
+import json
+import os
+import re
+import sys
+import zipfile
+from collections import defaultdict
+
+WORD = re.compile(r"[A-Za-z]+")
+IRREGULAR = {"men": "man", "women": "woman", "children": "child",
+             "feet": "foot", "teeth": "tooth", "geese": "goose",
+             "mice": "mouse", "lives": "life", "wives": "wife",
+             "knives": "knife", "leaves": "leaf", "selves": "self",
+             "brethren": "brother"}
+LOOKAHEAD = 40   # how many text words to search for a token's match
+
+
+def read_ids(meta, header):
+    if meta.endswith(".zip"):
+        with zipfile.ZipFile(meta) as z:
+            name = [n for n in z.namelist() if not n.endswith("/")][0]
+            s = z.read(name).decode("utf-8")
+    else:
+        with open(meta, encoding="utf-8") as f:
+            s = f.read()
+    rows = [r for r in csv.reader(io.StringIO(s)) if r and r[0].strip()]
+    if header:
+        rows = rows[1:]
+    return [r[0].strip() for r in rows]
+
+
+def js_to_py_template(t):
+    return re.sub(r"\$(\d+)", r"\\g<\1>", t).replace("$$", "$")
+
+
+def fits(word, tok):
+    if word == tok or IRREGULAR.get(word) == tok:
+        return True
+    # plurals and other suffixes, which are longer than the token:
+    # members/member, stories/story (but not and/ana)
+    return (len(tok) >= 3 and len(tok) < len(word) <= len(tok) + 3
+            and word.startswith(tok[:-1]))
+
+
+def find(words, parts, start, stop):
+    """first position in words[start:stop] where parts fit, or None"""
+    for j in range(start, min(stop, len(words) - len(parts) + 1)):
+        if all(fits(words[j + q], parts[q]) for q in range(len(parts))):
+            return j
+    return None
+
+
+def trial(words, tokens, n, i, count=10, window=8):
+    """how many of tokens[n:n+count] align, greedily, from word i, each
+    within a few words of the last (so that common words scattered
+    through the text don't make a wrong place look right)"""
+    got = 0
+    for tok, _ in tokens[n:n + count]:
+        parts = tok.split("_")
+        j = find(words, parts, i, i + window)
+        if j is not None:
+            i = j + len(parts)
+            got += 1
+    return got
+
+
+def align(text, tokens):
+    """tokens: [(word, topic)] in order. Returns the encoded list and the
+    number of tokens matched.
+
+    Each token is looked for within LOOKAHEAD words of the previous match.
+    If the alignment may have lost its place (nothing matched yet, or two
+    misses in a row), as when a page has a stretch of OCR debris the model
+    dropped, it checks how the next ten tokens would align from here. If
+    poorly (3 or fewer), it looks further on for a place to resume from
+    which they align well (7 or more)."""
+    words = [m.group().lower() for m in WORD.finditer(text)]
+    out, i, matched, misses = [], 0, 0, 0
+    for n, (tok, topic) in enumerate(tokens):
+        parts = tok.split("_")
+        j = find(words, parts, i, i + LOOKAHEAD)
+        if (j is None and (matched == 0 or misses >= 2)
+                and trial(words, tokens, n, i) <= 3):
+            start = i + LOOKAHEAD
+            while start < len(words):
+                k = find(words, parts, start, len(words))
+                if k is None:
+                    break
+                if trial(words, tokens, n + 1, k + len(parts)) >= 7:
+                    j = k
+                    break
+                start = k + 1
+        if j is None:
+            misses += 1
+            continue
+        out += [j - i, len(parts), topic]
+        i = j + len(parts)
+        matched += 1
+        misses = 0
+    return out, matched
+
+
+def main():
+    ap = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--state", required=True)
+    ap.add_argument("--meta", required=True)
+    ap.add_argument("--text", required=True)
+    ap.add_argument("--out", default="data/text-topics")
+    ap.add_argument("--header", action="store_true")
+    ap.add_argument("--match")
+    ap.add_argument("--replace")
+    args = ap.parse_args()
+
+    if (args.match is None) != (args.replace is None):
+        ap.error("--match and --replace go together")
+    ids = read_ids(args.meta, args.header)
+    if args.match:
+        pat = re.compile(args.match)
+        repl = js_to_py_template(args.replace)
+
+        def key(i):
+            return pat.sub(repl, i, count=1)
+    else:
+        def key(i):
+            return i
+
+    texts = {}          # bundle key -> {id: text}, for the bundle in use
+
+    def text_of(doc_id):
+        k = key(doc_id)
+        if k not in texts:
+            texts.clear()
+            path = os.path.join(args.text, k + ".json.zip")
+            try:
+                with zipfile.ZipFile(path) as z:
+                    texts[k] = json.loads(z.read(os.path.basename(k) + ".json"))
+            except (FileNotFoundError, KeyError):
+                texts[k] = {}
+        return texts[k].get(doc_id)
+
+    out = defaultdict(dict)
+    n_tok = n_match = n_docs = 0
+    no_text, poor = 0, []
+
+    def finish(d, tokens):
+        nonlocal n_tok, n_match, n_docs, no_text
+        doc_id = ids[d]
+        text = text_of(doc_id)
+        n_docs += 1
+        n_tok += len(tokens)
+        if text is None:
+            no_text += 1
+            return
+        enc, m = align(text, tokens)
+        n_match += m
+        if tokens and m / len(tokens) < 0.8:
+            poor.append((m / len(tokens), doc_id))
+        out[key(doc_id)][doc_id] = enc
+
+    cur, tokens = None, []
+    with gzip.open(args.state, "rt", encoding="utf-8") as f:
+        for line in f:
+            if line[0] == "#":
+                continue
+            d, _, _, _, word, topic = line.rstrip("\n").split(" ")
+            d = int(d)
+            if d != cur:
+                if cur is not None:
+                    finish(cur, tokens)
+                if d >= len(ids):
+                    sys.exit("the state has more documents than the metadata")
+                cur, tokens = d, []
+            tokens.append((word, int(topic)))
+        if cur is not None:
+            finish(cur, tokens)
+
+    if n_docs != len(ids):
+        print("warning: the state has %d documents, the metadata %d"
+              % (n_docs, len(ids)), file=sys.stderr)
+
+    total = 0
+    for k, docs in out.items():
+        dest = os.path.join(args.out, k + ".json.zip")
+        os.makedirs(os.path.dirname(dest) or ".", exist_ok=True)
+        with zipfile.ZipFile(dest, "w", zipfile.ZIP_DEFLATED,
+                             compresslevel=9) as z:
+            z.writestr(os.path.basename(k) + ".json",
+                       json.dumps(docs, separators=(",", ":")))
+        total += os.path.getsize(dest)
+
+    print("%d of %d tokens (%.1f%%) matched to their texts; %d bundles, "
+          "%.1f MB, written to %s"
+          % (n_match, n_tok, 100.0 * n_match / max(n_tok, 1), len(out),
+             total / 1e6, args.out), file=sys.stderr)
+    if no_text:
+        print("%d documents had no text" % no_text, file=sys.stderr)
+    if poor:
+        poor.sort()
+        print("%d documents had fewer than 80%% of their tokens matched, "
+              "e.g. %s" % (len(poor), ", ".join(
+                  "%s (%.0f%%)" % (i, 100 * r) for r, i in poor[:5])),
+              file=sys.stderr)
+    print('Add to "text" in VIS in info.json:', file=sys.stderr)
+    print(json.dumps({"topics": args.out.rstrip("/") + "/"}))
+
+
+if __name__ == "__main__":
+    main()

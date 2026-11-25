@@ -328,6 +328,18 @@ Each document's text is read from a file named by its id in the `--texts` direct
 
 `url` may also be the address of another web server (which must allow cross-origin requests, as GitHub Pages does), so that a large set of texts can be hosted apart from the browser. `note`, if given, is shown above each text.
 
+#### Highlighting texts by topic
+
+If you have the model's sampling state (MALLET's `train-topics --output-state`), the document page can also color each word of the text by the topic the model assigned it to. [bin/prepare-text-topics](bin/prepare-text-topics) matches the model's tokens, in order, to the words of each text bundle (allowing for lowercasing, stopword removal, plurals, and phrases like `young_man`) and writes the assignments in bundles named like the texts:
+
+```
+bin/prepare-text-topics --state model.state.gz --meta data/meta.csv.zip \
+    --text data/text --out data/text-topics \
+    --match '^([A-Za-z]+)(.*)-page\d+\.txt$' --replace '$1/$1$2'
+```
+
+The state's documents must be in the same order as the metadata's rows. The script reports how many tokens it matched; then add `"topics": "data/text-topics/"` to `VIS.text`. The page's ten largest topics get colors, shown as swatches in its topic table; words of its other topics are underlined. Pointing at a word shows its topic, and pointing at a topic in the table picks out its words. Readers can turn the highlighting off. In a browser with several models (such as cutoff variants of one model), the colors follow the topics listed for the page in the model being shown, while the assignments themselves are always the sampling state's.
+
 ### Adding view annotations
 
 If you wish to add additional HTML to specific views, simply modify [index.html](index.html). Give the annotating elements two CSS classes: `annote` and a class corresponding to the stable URL for the view, but with slashes replaced by underscores. Thus, 

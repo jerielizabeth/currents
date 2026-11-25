@@ -1182,18 +1182,14 @@ topic_group = function (t) {
 // Show the text of the document with the given id on the document page,
 // if VIS.text.url is set. Texts are in zipped JSON bundles of { id: text }
 // written by bin/prepare-text; a document's bundle is found by rewriting
-// its id with VIS.text.path.match and .replace (or is the id itself).
+// its id with VIS.text.path.match and .replace (or is the id itself). If
+// VIS.text.topics is also set, the words' topic assignments (written by
+// bin/prepare-text-topics, in bundles named the same way) are fetched too,
+// so the text can be highlighted by topic.
 doc_text = function (id) {
     var cfg = VIS.text,
-        key, path,
-        show = function (texts) {
-            view.doc.text({
-                enabled: true,
-                note: cfg.note,
-                text: texts && texts.hasOwnProperty(id) ? texts[id]
-                    : undefined
-            });
-        };
+        key, got = { },
+        fetch, show;
 
     if (!cfg || !cfg.url) {
         view.doc.text({ enabled: false });
@@ -1202,33 +1198,54 @@ doc_text = function (id) {
 
     key = cfg.path ? id.replace(new RegExp(cfg.path.match),
             cfg.path.replace) : id;
-    path = cfg.url + key + ".json.zip";
     my.doc_text_id = id;
-
-    if (!my.text_bundles || my.text_bundles.size() > 50) {
+    if (!my.text_bundles || my.text_bundles.size() > 100) {
         my.text_bundles = d3.map();
     }
-    if (my.text_bundles.has(path)) {
-        show(my.text_bundles.get(path));
-        return;
-    }
 
-    view.doc.text({ enabled: true, note: cfg.note, loading: true });
-    load_data(path, function (error, s) {
-        var texts;
-        if (!error && s) {
-            try {
-                texts = JSON.parse(s);
-                my.text_bundles.set(path, texts);
-            } catch (e) {
-                texts = undefined;
+    show = function () {
+        // only if the reader hasn't moved on to another document
+        if (my.doc_text_id !== id) {
+            return;
+        }
+        view.doc.text({
+            enabled: true,
+            note: cfg.note,
+            loading: got.text === undefined,
+            text: got.text && got.text.hasOwnProperty(id) ? got.text[id]
+                : undefined,
+            assignments: got.topics && got.topics.hasOwnProperty(id) ?
+                    got.topics[id] : undefined,
+            label: function (t) { return my.m.topic_label(t); }
+        });
+    };
+
+    // fetch a bundle (or take it from the cache), then show what we have
+    fetch = function (which, path) {
+        if (my.text_bundles.has(path)) {
+            got[which] = my.text_bundles.get(path);
+            return;
+        }
+        load_data(path, function (error, s) {
+            var result = null;  // null: tried and failed
+            if (!error && s) {
+                try {
+                    result = JSON.parse(s);
+                    my.text_bundles.set(path, result);
+                } catch (e) {
+                    result = null;
+                }
             }
-        }
-        // only show it if the reader hasn't moved on to another document
-        if (my.doc_text_id === id) {
-            show(texts);
-        }
-    });
+            got[which] = result;
+            show();
+        });
+    };
+
+    fetch("text", cfg.url + key + ".json.zip");
+    if (cfg.topics) {
+        fetch("topics", cfg.topics + key + ".json.zip");
+    }
+    show();
 };
 
 // series for view.composition: each of topics ts (0-based) with its

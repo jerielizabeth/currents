@@ -981,3 +981,42 @@ div.bar_tooltip .group_swatch {
 #data_banner #data_name {
     font-weight: bold;
 }
+
+/* document text highlighted by topic */
+
+#doc_text h3 a.doc_text_topics {
+    margin-left: 0.6em;
+    font-size: 0.75em;
+    font-weight: normal;
+}
+
+#doc_text .doc_text_body span.tw {
+    border-radius: 2px;
+    transition: opacity 0.15s;
+}
+
+#doc_text .doc_text_body.highlighting span.tw.tw_other {
+    border-bottom: 1px dotted #999;
+}
+
+#doc_text .doc_text_body.highlighting span.tw.tw_faded {
+    opacity: 0.25;
+}
+
+#doc_text .doc_text_body:not(.highlighting) span.tw {
+    background-color: transparent !important;
+    border-bottom: none;
+}
+
+#doc_topics span.doc_swatch {
+    display: none;
+    width: 0.8em;
+    height: 0.8em;
+    margin-right: 0.4em;
+    border-radius: 2px;
+    vertical-align: baseline;
+}
+
+#doc_view.text_highlighting #doc_topics span.doc_swatch {
+    display: inline-block;
+}
