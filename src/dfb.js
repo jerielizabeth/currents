@@ -1517,6 +1517,7 @@ load_model = function (id, vis) {
 
     my.m = my.ms.get(id);
     my.id = id;
+    view.data_name({ models: my.models, id: id });
 
     // invalidate cache
     // TODO silly to regenerate citations in most cases

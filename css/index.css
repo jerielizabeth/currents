@@ -961,3 +961,23 @@ div.bar_tooltip .group_swatch {
         padding-right: 11px;
     }
 }
+
+/* which dataset is shown, when the browser has several */
+
+#data_banner {
+    margin: -12px 0 12px 0;
+    padding: 3px 10px;
+    border-radius: 0 0 4px 4px;
+    background: #f2f2f2;
+    color: #555;
+    font-size: 0.9em;
+}
+
+#data_banner.data_banner_alt {
+    background: #fcf0c8;
+    color: #6b4f00;
+}
+
+#data_banner #data_name {
+    font-weight: bold;
+}

@@ -11,6 +11,7 @@ var view = (function () {
         warning,
         tooltip,
         frame,
+        data_name,
         update_annotations,
         weight_tds,
         setup_plot,
@@ -100,10 +101,6 @@ var view = (function () {
 
     // render global framing elements of the view
     frame = function (p) {
-        var m0 = p.models.find(function (m) {
-                return m.id === p.id;
-            });
-
         // the browser's name, then the project's title from info.json (the
         // ": " between them in the navbar comes from the stylesheet)
         if (p.title) {
@@ -124,15 +121,29 @@ var view = (function () {
                     })
                     .on("click", function (m) {
                         d3.event.preventDefault();
-                        d3.select("#data_name")
-                            .text(m.name || m.id);
                         my.dfb.switch_model(m.id);
                     });
-            d3.select("#data_name").text(m0.name || m0.id);
             d3.select("li#nav_data").classed("hidden", false);
+            data_name({ models: p.models, id: p.id });
         }
     };
     that.frame = frame;
+
+    // Name the dataset being shown, in the banner below the navbar. The
+    // banner is highlighted for any dataset but the first listed.
+    data_name = function (p) {
+        var m = p.models.find(function (x) { return x.id === p.id; });
+        if (p.models.length < 2 || !m) {
+            return;
+        }
+        d3.select("#data_name").text(m.name || m.id);
+        d3.select("#data_banner")
+            .classed("hidden", false)
+            .classed("data_banner_alt", m.id !== p.models[0].id);
+        d3.selectAll("#data_dropdown li")
+            .classed("active", function (x) { return x.id === m.id; });
+    };
+    that.data_name = data_name;
 
     update_annotations = function (v, param) {
         var j, cs = ["." + v];
