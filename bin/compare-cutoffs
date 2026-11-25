@@ -1,0 +1,179 @@
+#!/usr/bin/env python3
+"""
+Compare the cutoff variants written by bin/prepare-cutoffs with the
+original document-topic data, and the word-level methods with the
+within-page method.
+
+Usage:
+    compare-cutoffs [--data DATA] [--variants VARIANTS]
+                    [--thresholds 0.5,1,2,3,5] [--csv OUT]
+
+DATA (data by default) holds info.json, meta.csv.zip, and dt.json.zip;
+VARIANTS (DATA/cutoff by default) holds the variants, each with all three
+methods (page, word, split). Topic labels and groups come from info.json's
+VIS. Documents are binned by the year at the start of the metadata's date
+column (the seventh).
+
+For each threshold and method, prints
+  - the median and the largest change in a topic's share of the corpus
+    compared with the original, and
+  - the lowest correlation, over topics, between a topic's yearly share
+    in the variant and in the original;
+and for each threshold, comparing word and split with page,
+  - the median and largest difference in topic totals,
+  - the lowest correlation of yearly shares, and
+  - the largest and mean difference in topics' yearly shares of their
+    groups (VIS.topic_groups), in percentage points.
+
+Writes every topic's results to OUT (DATA/cutoff/cutoff-report.csv by
+default).
+"""
+
+import argparse
+import csv
+import io
+import json
+import math
+import os
+import sys
+import zipfile
+
+METHODS = ["page", "word", "split"]
+
+
+def check_python():
+    if sys.version_info < (3, 12):
+        print("warning: Python %d.%d; use 3.12 or later (make venv) to "
+              "reproduce results exactly, since sum() of floats changed in "
+              "3.12" % sys.version_info[:2], file=sys.stderr)
+
+
+def main():
+    check_python()
+    ap = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--data", default="data")
+    ap.add_argument("--variants")
+    ap.add_argument("--thresholds", default="0.5,1,2,3,5")
+    ap.add_argument("--csv")
+    args = ap.parse_args()
+    data = args.data
+    variants = args.variants or os.path.join(data, "cutoff")
+    thresholds = args.thresholds.split(",")
+    out_csv = args.csv or os.path.join(variants, "cutoff-report.csv")
+
+    info = json.load(open(os.path.join(data, "info.json")))
+    labels = info["VIS"]["topic_labels"]
+    groups = info["VIS"].get("topic_groups", [])
+    with zipfile.ZipFile(os.path.join(data, "meta.csv.zip")) as z:
+        name = [n for n in z.namelist() if not n.endswith("/")][0]
+        meta = list(csv.reader(io.StringIO(z.read(name).decode("utf-8"))))
+    year = [r[6][:4] for r in meta]
+    years = sorted(set(year))
+    yi = {y: j for j, y in enumerate(years)}
+    dyear = [yi[y] for y in year]
+
+    def load(path):
+        with zipfile.ZipFile(path) as z:
+            dt = json.loads(z.read("dt.json"))
+        K = len(dt["p"]) - 1
+        tot = [0.0] * K
+        yr = [[0.0] * len(years) for _ in range(K)]
+        for k in range(K):
+            for j in range(dt["p"][k], dt["p"][k + 1]):
+                x = dt["x"][j]
+                tot[k] += x
+                yr[k][dyear[dt["i"][j]]] += x
+        return tot, yr
+
+    def corr(a, b):
+        n = len(a)
+        ma = sum(a) / n
+        mb = sum(b) / n
+        sa = math.sqrt(sum((x - ma) ** 2 for x in a))
+        sb = math.sqrt(sum((x - mb) ** 2 for x in b))
+        if not (sa and sb):
+            return 1.0
+        return sum((x - ma) * (y - mb) for x, y in zip(a, b)) / (sa * sb)
+
+    orig_tot, orig_yr = load(os.path.join(data, "dt.json.zip"))
+    K = len(orig_tot)
+    year_tot = [sum(orig_yr[k][j] for k in range(K)) for j in range(len(years))]
+
+    def shares(yr):   # each topic's share of all words, per year
+        return [[yr[k][j] / year_tot[j] if year_tot[j] else 0
+                 for j in range(len(years))] for k in range(K)]
+
+    def group_comp(yr):   # each topic's share of its group, per year
+        res = {}
+        for g in groups:
+            ts = [t - 1 for t in g["topics"]]
+            for j in range(len(years)):
+                s = sum(yr[t][j] for t in ts)
+                for t in ts:
+                    res[(t, j)] = yr[t][j] / s if s else 0
+        return res
+
+    def label(k):
+        return labels.get(str(k + 1), "Topic %d" % (k + 1))
+
+    orig_sh = shares(orig_yr)
+    rows, summary = [], []
+    print("cutoff | method | topic share change vs model (median / largest) | trend corr. with model (lowest)")
+    for T in thresholds:
+        tag = T.replace(".", "_")
+        loaded = {m: load(os.path.join(variants, "%s-%s" % (m, tag), "dt.json.zip"))
+                  for m in METHODS}
+        sh = {m: shares(loaded[m][1]) for m in METHODS}
+        gc = {m: group_comp(loaded[m][1]) for m in METHODS}
+        for m in METHODS:
+            tot = loaded[m][0]
+            rel = [tot[k] / orig_tot[k] - 1 for k in range(K)]
+            cr = [corr(orig_sh[k], sh[m][k]) for k in range(K)]
+            srt = sorted(abs(r) for r in rel)
+            kmax = max(range(K), key=lambda k: abs(rel[k]))
+            kmin = min(range(K), key=lambda k: cr[k])
+            print("%4s%%  | %-5s  | %5.1f%% / %+6.1f%% %-45s | %.3f %s" % (
+                T, m, 100 * srt[K // 2], 100 * rel[kmax], label(kmax)[:45],
+                cr[kmin], label(kmin)[:40]))
+            for k in range(K):
+                rows.append({
+                    "cutoff_pct": T, "method": m, "topic": k + 1,
+                    "label": label(k),
+                    "share_model": orig_tot[k] / sum(orig_tot),
+                    "share_variant": tot[k] / sum(tot),
+                    "change_vs_model": rel[k],
+                    "trend_corr_vs_model": cr[k]})
+        for m in ["word", "split"]:
+            diff = [loaded[m][0][k] / loaded["page"][0][k] - 1 for k in range(K)]
+            cr = [corr(sh["page"][k], sh[m][k]) for k in range(K)]
+            gdiff = [abs(gc[m][key] - gc["page"][key]) for key in gc[m]] or [0]
+            kd = max(range(K), key=lambda k: abs(diff[k]))
+            kc = min(range(K), key=lambda k: cr[k])
+            summary.append((T, m, sorted(abs(d) for d in diff)[K // 2], diff[kd],
+                            kd, cr[kc], kc, max(gdiff), sum(gdiff) / len(gdiff)))
+            for k in range(K):
+                rows.append({
+                    "cutoff_pct": T, "method": m + "_vs_page", "topic": k + 1,
+                    "label": label(k),
+                    "share_model": orig_tot[k] / sum(orig_tot),
+                    "share_variant": loaded[m][0][k] / sum(loaded[m][0]),
+                    "change_vs_model": diff[k],
+                    "trend_corr_vs_model": cr[k]})
+
+    print("\nword-level vs within-page, same cutoff:")
+    print("cutoff | method | topic total diff (median / largest)                     | lowest trend corr.                      | group-share diff (max / mean, pct pts)")
+    for T, m, med, dmax, kd, cmin, kc, gmax, gmean in summary:
+        print("%4s%%  | %-5s  | %4.1f%% / %+6.1f%% %-35s | %.3f %-32s | %4.1f / %.2f" % (
+            T, m, 100 * med, 100 * dmax, label(kd)[:35], cmin, label(kc)[:32],
+            100 * gmax, 100 * gmean))
+
+    with open(out_csv, "w", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=list(rows[0]))
+        w.writeheader()
+        w.writerows(rows)
+    print("\nwrote", out_csv)
+
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,281 @@
+#!/usr/bin/env python3
+"""
+Make variants of a model's document-topic data with a per-document topic
+cutoff, reassigning the words of each document's minor topics to its
+remaining topics.
+
+Usage:
+    prepare-cutoffs --state STATE [--dt DT] [--out OUT]
+                    [--thresholds 0.5,1,2,3,5] [--methods page,word,split]
+
+STATE is the MALLET sampling state (gzipped, from train-topics
+--output-state) for the model the browser shows. If DT (the browser's
+dt.json.zip) is given, the script first checks that the state's
+document-topic counts match it exactly, and stops if they don't.
+
+For each threshold T (a percentage) and method, every document keeps the
+topics holding at least T% of its words (and always its largest topic);
+the words of its other topics are reassigned among the topics it keeps:
+
+  page   within the document, in proportion to the kept topics' counts
+  word   each word to the kept topic most likely to have produced it,
+         argmax_j (n_dj + alpha_j) * (n_jw + beta) / (n_j + V beta),
+         with the counts and hyperparameters from the state
+  split  each word divided among the kept topics in proportion to those
+         same probabilities
+
+Fractional results are rounded to whole words per document by largest
+remainder, so each document keeps its length. The model itself (the
+topics' word distributions) is unchanged: these are readings of its
+assignments, not new models.
+
+Writes OUT/<method>-<T>/dt.json.zip (with "." in T written as "_"), in
+the browser's format, and prints, for info.json, a "models" list naming
+the original data and each variant; the variants share the original's
+metadata and topic-word files. bin/compare-cutoffs compares the
+variants with the original and with each other.
+"""
+
+import argparse
+import array
+import gzip
+import json
+import os
+import sys
+import time
+import zipfile
+
+METHOD_NAMES = {
+    "page": "reassigned within page",
+    "word": "reassigned by word, most likely topic",
+    "split": "reassigned by word, split by probability",
+}
+
+
+def log(msg, t0):
+    print("%s (%.0fs)" % (msg, time.time() - t0), file=sys.stderr, flush=True)
+
+
+def tokens(state):
+    """yield (doc, word index, topic) for each token of the state, and set
+    tokens.alpha and tokens.beta from its header"""
+    with gzip.open(state, "rt", encoding="utf-8") as f:
+        for line in f:
+            if line[0] == "#":
+                if line.startswith("#alpha"):
+                    tokens.alpha = [float(a) for a in line.split(":")[1].split()]
+                elif line.startswith("#beta"):
+                    tokens.beta = float(line.split(":")[1])
+                continue
+            d, _, _, w, _, k = line.split(" ")
+            yield int(d), int(w), int(k)
+
+
+def by_document(state):
+    """yield (doc, {(word, topic): count}) for each document, in order"""
+    cur, wk = None, {}
+    for d, w, k in tokens(state):
+        if d != cur:
+            if cur is not None:
+                yield cur, wk
+                if d < cur:
+                    sys.exit("the state is not sorted by document")
+            cur, wk = d, {}
+        wk[(w, k)] = wk.get((w, k), 0) + 1
+    if cur is not None:
+        yield cur, wk
+
+
+def pass1(state, dtzip, t0):
+    """topic-word counts, and a check of document-topic counts against
+    dt.json"""
+    nwk = array.array("l")      # word-major: index w * K + k
+    K = None
+    by_topic = None
+    n_tok = 0
+    for d, wk in by_document(state):
+        if K is None:
+            K = len(tokens.alpha)
+            by_topic = [[] for _ in range(K)]
+        ndk = {}
+        for (w, k), n in wk.items():
+            need = (w + 1) * K
+            if need > len(nwk):
+                nwk.extend(array.array("l", bytes(8 * (need - len(nwk) + 1000 * K))))
+            nwk[w * K + k] += n
+            ndk[k] = ndk.get(k, 0) + n
+            n_tok += n
+        if dtzip:
+            for k, n in ndk.items():
+                by_topic[k].append((d, n))
+    V = len(nwk) // K
+    while V > 0 and not any(nwk[(V - 1) * K:V * K]):
+        V -= 1
+    del nwk[V * K:]
+    log("state: %d topics, %d word types, %d tokens" % (K, V, n_tok), t0)
+
+    if dtzip:
+        with zipfile.ZipFile(dtzip) as z:
+            dt = json.loads(z.read("dt.json"))
+        if len(dt["p"]) - 1 != K:
+            sys.exit("dt.json has %d topics, the state %d" % (len(dt["p"]) - 1, K))
+        bad = 0
+        for k in range(K):
+            a = sorted(by_topic[k])
+            b = sorted(zip(dt["i"][dt["p"][k]:dt["p"][k + 1]],
+                           dt["x"][dt["p"][k]:dt["p"][k + 1]]))
+            bad += a != b
+        if bad:
+            sys.exit("the state's document-topic counts differ from dt.json's "
+                     "for %d topics: is this the right state?" % bad)
+        log("the state matches dt.json", t0)
+    return K, V, nwk
+
+
+def round_doc(weights, total):
+    """largest-remainder rounding of {k: float} to ints summing to total"""
+    fl = {k: int(v) for k, v in weights.items()}
+    short = total - sum(fl.values())
+    for k in sorted(weights, key=lambda k: weights[k] - fl[k], reverse=True)[:short]:
+        fl[k] += 1
+    return fl
+
+
+def pass2(state, K, V, nwk, thresholds, methods, t0):
+    alpha, beta = tokens.alpha, tokens.beta
+    nk = [0] * K
+    for w in range(V):
+        base = w * K
+        for k in range(K):
+            nk[k] += nwk[base + k]
+    denom = [nk[k] + V * beta for k in range(K)]
+
+    # per variant: parallel arrays of (topic, doc, count)
+    res = {(m, t): (array.array("i"), array.array("i"), array.array("i"))
+           for m in methods for t in thresholds}
+    moved = {t: 0 for t in thresholds}
+    n_tok = 0
+
+    def emit(key, d, doc):
+        if key not in res:
+            return
+        ks, ds, xs = res[key]
+        for k, x in doc.items():
+            if x > 0:
+                ks.append(k)
+                ds.append(d)
+                xs.append(x)
+
+    for d, wk in by_document(state):
+        ndk = {}
+        for (w, k), n in wk.items():
+            ndk[k] = ndk.get(k, 0) + n
+        L = sum(ndk.values())
+        n_tok += L
+        for T in thresholds:
+            kept = [k for k, n in ndk.items() if n >= T / 100.0 * L]
+            if not kept:
+                kept = [max(ndk, key=ndk.get)]
+            kset = set(kept)
+            ks = sum(ndk[k] for k in kept)
+            D = L - ks
+            moved[T] += D
+            base = {k: ndk[k] for k in kept}
+            if D == 0:
+                for m in methods:
+                    emit((m, T), d, base)
+                continue
+            if "page" in methods:
+                emit(("page", T), d, round_doc(
+                    {k: base[k] + D * base[k] / ks for k in kept}, L))
+            if "word" in methods or "split" in methods:
+                prior = {j: ndk[j] + alpha[j] for j in kept}
+                arg = dict(base)
+                spl = {k: float(v) for k, v in base.items()}
+                for (w, k), n in wk.items():
+                    if k in kset:
+                        continue
+                    row = w * K
+                    sc = [(prior[j] * (nwk[row + j] + beta) / denom[j], j)
+                          for j in kept]
+                    arg[max(sc)[1]] += n
+                    S = sum(s for s, _ in sc)
+                    for s, j in sc:
+                        spl[j] += n * s / S
+                emit(("word", T), d, arg)
+                emit(("split", T), d, round_doc(spl, L))
+    for T in thresholds:
+        log("cutoff %g%%: %.1f%% of words reassigned"
+            % (T, 100.0 * moved[T] / n_tok), t0)
+    return res, n_tok
+
+
+def tag(t):
+    return ("%g" % t).replace(".", "_")
+
+
+def check_python():
+    if sys.version_info < (3, 12):
+        print("warning: Python %d.%d; use 3.12 or later (make venv) to "
+              "reproduce results exactly, since sum() of floats changed in "
+              "3.12" % sys.version_info[:2], file=sys.stderr)
+
+
+def main():
+    check_python()
+    ap = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--state", required=True)
+    ap.add_argument("--dt", help="the browser's dt.json.zip, to check against")
+    ap.add_argument("--out", default="data/cutoff")
+    ap.add_argument("--thresholds", default="0.5,1,2,3,5",
+                    help="percentages, comma-separated")
+    ap.add_argument("--methods", default="page,word,split")
+    args = ap.parse_args()
+    thresholds = [float(t) for t in args.thresholds.split(",")]
+    methods = args.methods.split(",")
+    for m in methods:
+        if m not in METHOD_NAMES:
+            ap.error("unknown method %s" % m)
+
+    t0 = time.time()
+    K, V, nwk = pass1(args.state, args.dt, t0)
+    res, n_tok = pass2(args.state, K, V, nwk, thresholds, methods, t0)
+
+    for (m, T), (ks, ds, xs) in sorted(res.items(), key=lambda x: (x[0][1], methods.index(x[0][0]))):
+        assert sum(xs) == n_tok, (m, T, sum(xs), n_tok)
+        order = sorted(range(len(ks)), key=lambda j: (ks[j], ds[j]))
+        p = [0] * (K + 1)
+        for j in order:
+            p[ks[j] + 1] += 1
+        for k in range(K):
+            p[k + 1] += p[k]
+        dt = {"i": [ds[j] for j in order], "p": p, "x": [xs[j] for j in order]}
+        dest = os.path.join(args.out, "%s-%s" % (m, tag(T)))
+        os.makedirs(dest, exist_ok=True)
+        with zipfile.ZipFile(os.path.join(dest, "dt.json.zip"), "w",
+                             zipfile.ZIP_DEFLATED) as z:
+            z.writestr("dt.json", json.dumps(dt, separators=(",", ":")))
+        log("wrote %s" % dest, t0)
+
+    # the "models" list for info.json
+    out = args.out.rstrip("/")
+    shared = {"info": out + "/model.json", "meta": "data/meta.csv.zip",
+              "tw": "data/tw.json", "topic_scaled": "data/topic_scaled.csv"}
+    with open(os.path.join(out, "model.json"), "w") as f:
+        f.write("{}\n")
+    models = [{"id": "all", "name": "All words (the model)",
+               "files": dict(shared, dt=args.dt or "data/dt.json.zip")}]
+    for T in thresholds:
+        for m in methods:
+            models.append({
+                "id": "%s-%g" % (m, T),
+                "name": "%g%% cutoff, %s" % (T, METHOD_NAMES[m]),
+                "files": dict(shared, dt="%s/%s-%s/dt.json.zip" % (out, m, tag(T)))})
+    print('Add to info.json (adjusting the shared file paths if need be):',
+          file=sys.stderr)
+    print(json.dumps({"models": models}, indent=2))
+
+
+if __name__ == "__main__":
+    main()

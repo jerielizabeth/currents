@@ -351,6 +351,29 @@ bin/prepare-text-topics --state model.state.gz --meta data/meta.csv.zip \
 
 The state's documents must be in the same order as the metadata's rows. The script reports how many tokens it matched; then add `"topics": "data/text-topics/"` to `VIS.text`. The page's ten largest topics get colors, shown as swatches in its topic table; words of its other topics are underlined. Pointing at a word shows its topic, and pointing at a topic in the table picks out its words. Readers can turn the highlighting off. In a browser with several models (such as cutoff variants of one model), the colors follow the topics listed for the page in the model being shown, while the assignments themselves are always the sampling state's.
 
+### Topic cutoffs
+
+A topic model gives every document a little of many topics: each word is assigned to some topic, so a page typically has a few words each in a dozen or more minor topics. To see how much those minor assignments matter, [bin/prepare-cutoffs](bin/prepare-cutoffs) makes variants of the document-topic data in which each document keeps only the topics holding at least some percentage of its words, and the words of its other topics are reassigned to the topics it keeps, by one of three methods:
+
+- `page`: within the document, in proportion to the kept topics' sizes
+- `word`: each word to the kept topic most likely to have produced it, by the model's own probabilities (the document's topic counts plus α, times the topic's probability for the word)
+- `split`: each word divided among the kept topics by those same probabilities
+
+The word-level methods need the model's sampling state, which records each word's topic:
+
+```
+bin/prepare-cutoffs --state model.state.gz --dt data/dt.json.zip \
+    --out data/cutoff --thresholds 0.5,1,2,3,5
+```
+
+With `--dt`, the script first checks that the state matches the browser's data, and stops if not. It writes each variant as `data/cutoff/<method>-<threshold>/dt.json.zip` and prints a `models` list for `info.json` that offers the original and every variant in the "Data" menu (see "Multiple models in a single browser" above), all sharing the original's metadata and topic words. The topics themselves are unchanged: the variants are readings of the model's assignments, not new models.
+
+[bin/compare-cutoffs](bin/compare-cutoffs) then compares the variants with the original (how much each topic's share of the corpus changes, and how closely its trend over the years follows the original's) and the word-level methods with the within-page method (topic totals, trends, and topics' shares of their groups), printing a summary and writing every topic's results to `data/cutoff/cutoff-report.csv`:
+
+```
+bin/compare-cutoffs --data data
+```
+
 ### Adding view annotations
 
 If you wish to add additional HTML to specific views, simply modify [index.html](index.html). Give the annotating elements two CSS classes: `annote` and a class corresponding to the stable URL for the view, but with slashes replaced by underscores. Thus, 
